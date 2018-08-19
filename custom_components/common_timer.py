@@ -340,8 +340,11 @@ class CommonTimer:
             self.set_state(self._ui[UI_SWITCH], state = 'off')
 
     def get_entity_map(self, entity_id):
-        if self._store.get(self._domain, None) is not None:
-            return self._store.get(self._domain, None).get(entity_id, None)
+        if entity_id is None:
+            return None
+        domain = entity_id.split('.')[0]
+        if self._store.get(domain, None) is not None:
+            return self._store.get(domain, None).get(entity_id, None)
         else:
             return None
     
