@@ -11,6 +11,10 @@ from homeassistant.core import callback
 from homeassistant.components.input_select import InputSelect
 from homeassistant.components.input_boolean import InputBoolean
 from homeassistant.components.input_text import InputText
+
+
+
+from homeassistant.components.sensor.template import SensorTemplate
 from homeassistant.const import (
     ATTR_ENTITY_ID, ATTR_UNIT_OF_MEASUREMENT, CONF_ICON, CONF_NAME, CONF_MODE, EVENT_HOMEASSISTANT_START, EVENT_STATE_CHANGED, SERVICE_SELECT_OPTION, SERVICE_TURN_ON, SERVICE_TURN_OFF)
 
@@ -22,6 +26,12 @@ from homeassistant.util.async_ import (
     run_coroutine_threadsafe, run_callback_threadsafe)
 
 import time
+from datetime import datetime
+import operator
+from homeassistant.helpers import config_per_platform, discovery
+from homeassistant.helpers import discovery
+from homeassistant.helpers.template import Template
+
 TIME_BETWEEN_UPDATES = timedelta(seconds=1)
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,14 +62,18 @@ CONF_OPTIONS = 'options'
 CONF_USE_FOR = 'use_for'
 CONF_MIN = 'min'
 CONF_MAX = 'max'
-
+CONF_INFO_NUM_MIN = 'info_num_min'
+CONF_INFO_NUM_MAX = 'info_num_max'
 CONF_DOMAINS = 'domains'
 CONF_EXCLUDE = 'exclude'
 CONF_PATTERN = 'pattern'
-
+CONF_FRIENDLY_NAME = 'friendly_name'
+CONF_INFO_PANEL = 'info_panel'
 ATTR_OBJECT_ID = 'object_id'
 ATTR_NAME ='name'
 ATTR_ENTITIES = 'entities'
+
+PLATFORM_KEY = ('template', None, 'common_timer')
 
 COMMON_TIMER_CONF={
     'entities':
@@ -113,19 +127,37 @@ COMMON_TIMER_CONF={
                 'use_for': 'switch'
             }
         },
-        'group':
-        {
-            'common_timer':
+
+        'sensor':
+        [{
+            'platform': 'template',
+            'entity_namespace': "common_timer",
+            'sensors':
             {
-                'name': '通用定时器',
-                'entities': ['input_select.domain', 'input_select.entity', 'input_select.operation']
+                'ct_row_0':
+                {
+                    'friendly_name': "无定时任务",
+                    'value_template': Template("-"),
+                    'icon_template': Template("mdi:calendar-check")
+                }
             }
-        }
+        },
+        {
+            'platform': 'api_streams'
+        }]
+        
     },
-    
-    'domains': ['light', 'switch', 'script', 'automation'],
+    'domains': ['light', 'switch', 'automation', 'script', 'input_boolean'],
     'exclude': [],
-    # 'pattern': '[\u4e00-\u9fa5]+',
+    'pattern': '[\u4e00-\u9fa5]+',
+    'name': 'common_timer_control_panel',
+    'friendly_name': '通用定时器',
+    'info_panel':{
+        'name': 'common_timer_info_panel',
+        'friendly_name': '定时任务列表',
+        'info_num_min': 1,
+        'info_num_max': 10,
+    }
 }
 @asyncio.coroutine
 def async_setup(hass, config):
@@ -134,66 +166,152 @@ def async_setup(hass, config):
     
     
     VALIDATED_CONF = COMMON_TIMER_CONF[CONF_ENTITIES]
+    info_ui = []
     for domain in VALIDATED_CONF:
-        for object_id in VALIDATED_CONF[domain]:
-            if CONF_USE_FOR in VALIDATED_CONF[domain][object_id]:
-                user_for = VALIDATED_CONF[domain][object_id][CONF_USE_FOR]
-                ui[user_for] = '{}.{}'.format(domain, object_id)
-                VALIDATED_CONF[domain][object_id].pop(CONF_USE_FOR)
+        if isinstance(VALIDATED_CONF[domain], list):
+            for object_id in VALIDATED_CONF[domain][0]['sensors']:
+                info_ui.append('{}.{}'.format(domain, object_id))
+        else:
+            for object_id in VALIDATED_CONF[domain]:        
+                if CONF_USE_FOR in VALIDATED_CONF[domain][object_id]:
+                    user_for = VALIDATED_CONF[domain][object_id][CONF_USE_FOR]
+                    ui[user_for] = '{}.{}'.format(domain, object_id)
+                    VALIDATED_CONF[domain][object_id].pop(CONF_USE_FOR)
 
     components = set(key.split(' ')[0] for key in config.keys())
     
-    for setup_domain in ['input_select', 'input_text', 'input_boolean']:
+    for setup_domain in ['input_select', 'input_text', 'input_boolean', 'sensor']:
         
-        if setup_domain in components: 
+        if setup_domain in components:
+            _LOGGER.debug('initial component[%s]: config has this component', setup_domain)
             
+            
+            """
             setup_tasks = hass.data.get('setup_tasks')
             if setup_tasks is not None and setup_domain in setup_tasks:
-                _LOGGER.debug("wait for HA initial %s component.", setup_domain)
+                _LOGGER.debug("initial component[%s]: HA is initializing, wait.", setup_domain)
                 yield from setup_tasks[setup_domain]
-            
-            entities = []
-            for object_id, conf in VALIDATED_CONF.get(setup_domain, {}).items():
-                _LOGGER.debug("initializing %s.%s", setup_domain, object_id)
-                if setup_domain == 'input_select':
+                _LOGGER.debug("initial component[%s]: HA finish initialization.", setup_domain)
+            """
+            while setup_domain not in hass.config.components:
+                yield from asyncio.sleep(1)
+                _LOGGER.debug("initial component[%s]: wait for HA initialization.", setup_domain)
+
+            if setup_domain in ['input_select', 'input_text', 'input_boolean']: 
+                _LOGGER.debug("initial component[%s]: component is ready, use component's method.", setup_domain)
+                
+                entities = []
+                for object_id, conf in VALIDATED_CONF.get(setup_domain, {}).items():
                     
-                    entity = InputSelect(object_id, conf.get(CONF_NAME, object_id), conf.get(CONF_INITIAL), conf.get(CONF_OPTIONS) or [], conf.get(CONF_ICON))
-                elif setup_domain == 'input_text':
+                    if setup_domain == 'input_select':
+                        
+                        entity = InputSelect(object_id, conf.get(CONF_NAME, object_id), conf.get(CONF_INITIAL), conf.get(CONF_OPTIONS) or [], conf.get(CONF_ICON))
+                    elif setup_domain == 'input_text':
+                        
+                        entity = InputText(object_id, conf.get(CONF_NAME, object_id), conf.get(CONF_INITIAL), conf.get(CONF_MIN), conf.get(CONF_MAX), conf.get(CONF_ICON), conf.get(ATTR_UNIT_OF_MEASUREMENT), conf.get(CONF_PATTERN), conf.get(CONF_MODE))
+                    elif setup_domain == 'input_boolean':
+                        
+                        entity = InputBoolean(object_id, conf.get(CONF_NAME), conf.get(CONF_INITIAL), conf.get(CONF_ICON))
+                        _LOGGER.debug("input_boolean.timer_button:%s,%s,%s,%s", object_id, conf.get(CONF_NAME), conf.get(CONF_INITIAL), conf.get(CONF_ICON))
+                    else:
+                        pass
+                        
+                    entities.append(entity)
+                
+                yield from hass.data[setup_domain].async_add_entities(entities)        
+                _LOGGER.debug('initial component[%s]: entities added.', setup_domain)
+            elif setup_domain in ['sensor']:   
+                _LOGGER.debug("initial component.platform[%s]: component is ready, use custom method.", setup_domain)
+                """
+                for p_type, p_config in config_per_platform({setup_domain: VALIDATED_CONF.get(setup_domain, {})}, setup_domain): 
                     
-                    entity = InputText(object_id, conf.get(CONF_NAME, object_id), conf.get(CONF_INITIAL), conf.get(CONF_MIN), conf.get(CONF_MAX), conf.get(CONF_ICON), conf.get(ATTR_UNIT_OF_MEASUREMENT), conf.get(CONF_PATTERN), conf.get(CONF_MODE))
-                else:
-                    
-                    entity = InputBoolean(object_id, conf.get(CONF_NAME), conf.get(CONF_INITIAL), conf.get(CONF_ICON))
-                    _LOGGER.debug("input_boolean.timer_button:%s,%s,%s,%s", object_id, conf.get(CONF_NAME), conf.get(CONF_INITIAL), conf.get(CONF_ICON))
-                entities.append(entity)
-            _LOGGER.debug("entities:%s", entities)
-            yield from hass.data[setup_domain].async_add_entities(entities)        
-            _LOGGER.debug('add entity in %s component.', setup_domain)          
+                    key = (p_type, None, 'common_timer')
+                    if '{}.{}'.format(setup_domain,p_type) in hass.config.components:
+                        _LOGGER.debug("initial component.platform[%s]: platform is ready",p_type)
+                        entities = []
+                        for :
+                            entity = SensorTemplate
+                            entities.append(entity)                        
+                        yield from hass.data[setup_domain]._platforms[PLATFORM_KEY]._async_schedule_add_entities(entities)
+                    else:
+                        _LOGGER.debug("initial component.platform[%s]: platform isn't ready",p_type)
+                        yield from hass.data[setup_domain].async_setup(p_config)
+                """
+                yield from hass.data[setup_domain].async_setup({setup_domain: VALIDATED_CONF.get(setup_domain, {})})
+
+                
+                
+                
+                
+                
+                
+                
+                
+                
+            else:
+                _LOGGER.debug("initial component[%s]: undefined initialize method.", setup_domain)
+
         
         else:
+            _LOGGER.debug('initial component[%s]: config hasn\'t this componet , use HA\'s setup method to initialize entity.', setup_domain)
             hass.async_create_task(setup.async_setup_component(hass, setup_domain, VALIDATED_CONF))
-            _LOGGER.debug('setup %s component.', setup_domain)
+
     
     data = {
-        ATTR_OBJECT_ID: 'common_timer',
-        ATTR_NAME: '通用定时器',
+        ATTR_OBJECT_ID: COMMON_TIMER_CONF[CONF_NAME],
+        ATTR_NAME: COMMON_TIMER_CONF[CONF_FRIENDLY_NAME],
         ATTR_ENTITIES: [entity_id for param, entity_id in ui.items()]
         }
     
     yield from hass.services.async_call('group', SERVICE_SET, data)
     
-    _LOGGER.debug('add group.')
+    _LOGGER.debug('---control planel initialized---')
+
+    
+    
+    info_config = COMMON_TIMER_CONF.get(CONF_INFO_PANEL)
+    if info_config:
+        entities = []
+        for num in range(1, info_config[CONF_INFO_NUM_MIN]):
+            object_id = 'ct_row_{}'.format(num)
+            state_template = Template('-')
+            state_template.hass = hass
+            icon_template = Template('mdi:calendar-check')
+            icon_template.hass = hass
+            entity = SensorTemplate(hass = hass,
+                                    device_id = object_id,
+                                    friendly_name = '无定时任务',
+                                    friendly_name_template = None,
+                                    unit_of_measurement = None,
+                                    state_template = state_template,
+                                    icon_template = icon_template,
+                                    entity_picture_template = None,
+                                    entity_ids = set(),
+                                    device_class = None)
+
+            entities.append(entity)
+            info_ui.append(entity.entity_id)
+        yield from hass.data['sensor']._platforms[PLATFORM_KEY].async_add_entities(entities)
+        data = {
+            ATTR_OBJECT_ID: info_config[CONF_NAME],
+            ATTR_NAME: info_config[CONF_FRIENDLY_NAME],
+            ATTR_ENTITIES: [entity_id for entity_id in info_ui]
+            }
+        yield from hass.services.async_call('group', SERVICE_SET, data)
+        _LOGGER.debug('---info planel initialized---')
 
     domains = COMMON_TIMER_CONF.get('domains', ['light', 'switch'])   
     exclude = COMMON_TIMER_CONF.get('exclude', [])        
     pattern = COMMON_TIMER_CONF.get('pattern', '.*')  
     exclude.append(ui['switch'])    
-    common_timer = CommonTimer(domains, exclude, pattern, ui, hass)
+    common_timer = CommonTimer(domains, exclude, pattern, ui, hass, info_config)
 
     @callback
     def initial(event):
         _LOGGER.debug('start initialize.')
         common_timer.prepare()
+        for key in hass.data['sensor']._platforms:
+            _LOGGER.debug("sensor platforms:%s", key)
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, initial)
 
     @callback
@@ -214,12 +332,15 @@ def async_setup(hass, config):
         elif event.data[ATTR_ENTITY_ID] == ui[UI_SWITCH]:
             
             common_timer.switch(event.data['new_state'].as_dict()['state'])
+        else:
+            
+            hass.async_add_job(common_timer.update_info_panel(event.data[ATTR_ENTITY_ID]))
     hass.bus.async_listen(EVENT_STATE_CHANGED, common_timer_handle)
 
     return True
     
 class CommonTimer:
-    def __init__(self, domains, exclude, pattern, ui, hass = None):
+    def __init__(self, domains, exclude, pattern, ui, hass = None, info_config = None):
         self._domains = domains
         self._exclude = exclude
         self._pattern = pattern
@@ -227,10 +348,14 @@ class CommonTimer:
         self._ui = ui
         self._store = {}
         self._dic_friendly_name = {}                    
-        self._dic_operation = {'turn_on':'开','turn_off':'关','开':'turn_on','关':'turn_off'}                            
+        self._dic_operation = {'on':'开','off':'关','开':'on','关':'off'}                            
+        self._dic_icon = {'light': 'mdi:lightbulb', 'switch': 'mdi:toggle-switch', 'automation': 'mdi:playlist-play', 'script': 'mdi:script', 'input_boolean': 'mdi:toggle-switch'}
         self._domain = None
         self._entity_id = None
         self._queue = DelayQueue(hass, 60)   
+        self._tasks = None
+        self._tasks_ids = None
+        self._info_config = info_config
         
     def prepare(self):
         pattern = re.compile(self._pattern)
@@ -246,13 +371,18 @@ class CommonTimer:
             else:
                 friendly_name = state.name 
                 if not self._pattern or pattern.search(friendly_name):
-                    _LOGGER.debug("添加{}({})".format(friendly_name, entity_id))
+                    _LOGGER.debug("添加设备:{}({})".format(friendly_name, entity_id))
                     self._dic_friendly_name.setdefault(friendly_name, entity_id)
                     self._store.setdefault(domain,{}).setdefault(entity_id,{}).setdefault('friendly_name', friendly_name)
+                    
+                    
+                    
+                    self._store[domain][entity_id]['icon'] = self.get_attributes(entity_id).get('icon', self._dic_icon[domain])
+                    self._store[domain][entity_id]['entity_id'] = entity_id
                     self._store[domain][entity_id]['duration'] = '0:00:00'
                     self._store[domain][entity_id]['remaining'] = '0:00:00'
                     self._store[domain][entity_id]['handle'] = None
-                    self._store[domain][entity_id]['operation'] = 'turn_on' if domain == 'autonmation' or domain == 'script' else 'turn_off'    
+                    self._store[domain][entity_id]['operation'] = 'on' if domain == 'autonmation' or domain == 'script' else 'off'    
                 else:
                     _LOGGER.debug("忽略{}({})".format(friendly_name, entity_id))
         options= list(self._store.keys())
@@ -294,7 +424,7 @@ class CommonTimer:
                 return
             remaining_time = self._queue.get_remaining_time(entity_map['handle'])
             if remaining_time is not None:
-                duration = remaining_time
+                duration = str(remaining_time)
                 self.set_state(self._ui[UI_INPUT_DURATION], state= duration)
                 self.set_state(self._ui[UI_SWITCH], state = 'on')
             else:
@@ -331,6 +461,8 @@ class CommonTimer:
                         operation = self._dic_operation.get(self.get_state(self._ui[UI_INPUT_OPERATION]))
                         entity_map['handle'] = self._queue.insert(entity_id, duration, self.handle_task, operation = operation)   
                         entity_map['operation'] = operation             
+                        
+                        entity_map['exec_time'] = datetime.now() + self._queue.get_remaining_time(entity_map['handle'])
                 else:           
                     self._queue.remove(entity_map['handle'])
                     entity_map['handle'] = None
@@ -338,6 +470,8 @@ class CommonTimer:
         else:
             _LOGGER.debug("未选设备类型")
             self.set_state(self._ui[UI_SWITCH], state = 'off')
+        _LOGGER.debug("---switch---")
+        self._hass.async_add_job(self.update_info_panel)
 
     def get_entity_map(self, entity_id):
         if entity_id is None:
@@ -350,8 +484,11 @@ class CommonTimer:
     
     def get_state(self, entity_id):
         return self._hass.states.get(entity_id).as_dict()['state']
-    
-    def set_state(self, entity_id, state = None, service = None):
+    def get_attributes(self, entity_id):
+        return self._hass.states.get(entity_id).as_dict()['attributes']
+
+    def set_state(self, entity_id, state = None, service = None ):
+        _LOGGER.debug("handle set_state(): entity_id= {}, state= {}, service = {}".format(entity_id, state, service))
         domain = entity_id.split('.')[0]
         if domain == 'input_text':
             self._hass.async_add_job(self._hass.services.async_call(domain, SERVICE_SET_VALUE, {'entity_id': entity_id, 'value': state}))
@@ -379,7 +516,6 @@ class CommonTimer:
         
         
         self._queue.read()
-
         
         
         
@@ -396,32 +532,135 @@ class CommonTimer:
                 if remaining_time == '0:00:00':
                     self.set_state(self._ui[UI_INPUT_DURATION], state = entity_map['duration'])
                 else:
-                    self.set_state(self._ui[UI_INPUT_DURATION], state = remaining_time)
+                    self.set_state(self._ui[UI_INPUT_DURATION], state = str(remaining_time))
                 self.set_state(self._ui[UI_SWITCH], state = 'off')
             else:
-                self.set_state(self._ui[UI_INPUT_DURATION], state = remaining_time)
+                self.set_state(self._ui[UI_INPUT_DURATION], state = str(remaining_time))
     
     
     def handle_task(self, entity_id, operation, **kwargs):
         
         domain = entity_id.split('.')[0]
+        _LOGGER.debug("handle_task: entity_id=%s.", entity_id)
         entity_map = self.get_entity_map(entity_id)
         entity_map['handle'] = None
         entity_map['remaining'] = '0:00:00'             
 
-        if operation == 'custom':            
+        if operation == 'custom':
+            
             pass
         else:
-            service_name = domain+'.'+operation
-            self.set_state(entity_id, service = operation)
-            _LOGGER.debug("handle_task finish:{}({})".format(service_name,entity_id))        
-        # self._hass.async_add_job(self.long_time_task)
-
+            service = 'turn_'+operation
+            state = operation
+            self.set_state(entity_id, state = state, service = service)
+            _LOGGER.debug("handle_task finish:{}({})".format(service,entity_id))
+        
+        
+        self._hass.async_add_job(self.update_info_panel)
     def long_time_task(self):
-        """ 测试用的 """
+        
         _LOGGER.debug("handle long time task, start")
         time.sleep(5)
         _LOGGER.debug("handle long time task, finish")
+    
+    def get_row(self, entity_id):
+        
+        if entity_id is None or self._tasks_ids is None:
+            return None
+        try:
+            row = self._tasks_ids.index(entity_id)
+            return row
+        except ValueError:
+            return None
+
+    @asyncio.coroutine
+    def update_info_panel(self, entity_id = None):
+        info_config = self._info_config
+        if info_config is None:
+            return
+        _LOGGER.debug("-----------update_info_panel()------------")
+
+        if entity_id:
+            row = self.get_row(entity_id)
+            if row is not None:  
+                _LOGGER.debug("%s状态被改变，进行更新(at row %s)",entity_id,row)
+                info_entity_id = 'sensor.ct_row_{}'.format(row)
+                info_entity = self._hass.data['sensor'].get_entity(info_entity_id)
+                info2 = Template('{} -> {}'.format(self.get_state(self._tasks[row]['entity_id']), self._tasks[row]['operation']))
+                info2.hass = self._hass
+                info_entity._template = info2
+                info_entity.async_schedule_update_ha_state(True)
+            else:
+                pass
+                _LOGGER.debug("%s不在任务列表%s中，忽略",entity_id,self._tasks_ids)
+            return
+
+        tasks = [attrs for entities in self._store.values() for entity_id, attrs in entities.items() if attrs['handle'] is not None]
+        sorted_tasks = sorted(tasks, key=operator.itemgetter('exec_time'))
+        info_row_num = len(sorted_tasks) if len(sorted_tasks) < info_config[CONF_INFO_NUM_MAX] else info_config[CONF_INFO_NUM_MAX]
+        info_entities = []
+        info_ui = []
+        default_state = Template('-')
+        default_state.hass = self._hass
+        default_icon = Template('mdi:calendar-check')
+        default_icon.hass = self._hass
+        for row in range(0, info_config[CONF_INFO_NUM_MAX]):
+            info_entity_id = 'sensor.ct_row_{}'.format(row)
+            info_entity = self._hass.data['sensor'].get_entity(info_entity_id)
+            if row < info_row_num:
+                _LOGGER.debug("info_entity:%s, row=%s",info_entity, row)
+                
+                info1 = '{}{}'.format(align(sorted_tasks[row]['friendly_name'],28), align(sorted_tasks[row]['exec_time'].strftime("%Y-%m-%d %H:%M:%S"),20))
+                info2 = Template('{} -> {}'.format(self.get_state(sorted_tasks[row]['entity_id']), sorted_tasks[row]['operation']))
+                info2.hass = self._hass
+                
+                info3 = Template(sorted_tasks[row]['icon'])
+                info3.hass = self._hass
+                if info_entity is not None:
+                    _LOGGER.debug("row%s, exist. info_entity_id=%s",row,info_entity_id)
+                    info_entity._name = info1
+                    info_entity._template = info2
+                    info_entity._icon_template = info3
+                    info_entity.async_schedule_update_ha_state(True)
+                else:
+                    
+                    object_id = 'ct_row_{}'.format(row)
+                    sensor = SensorTemplate(hass = self._hass,
+                                            device_id = object_id,
+                                            friendly_name = info1,
+                                            friendly_name_template = None,
+                                            unit_of_measurement = None,
+                                            state_template = info2,
+                                            icon_template = info3,
+                                            entity_picture_template = None,
+                                            entity_ids = set(),
+                                            device_class = None)
+                    info_entities.append(sensor)
+                info_ui.append(info_entity_id)
+            else:
+                if not any([info_row_num, row]) or row < info_config[CONF_INFO_NUM_MIN] or info_config[CONF_INFO_NUM_MAX] == info_config[CONF_INFO_NUM_MIN]:
+                    info1 = '无定时任务'
+                    info_entity._name = info1
+                    info_entity._template = default_state
+                    info_entity._icon_template = default_icon
+                    info_entity.async_schedule_update_ha_state(True)
+                    info_ui.append(info_entity_id)
+                else:
+                    yield from self._hass.data['sensor'].async_remove_entity(info_entity_id)
+        if info_entities:
+            _LOGGER.debug("info: add entities")
+            yield from self._hass.data['sensor']._platforms[PLATFORM_KEY].async_add_entities(info_entities, update_before_add = True)
+
+        data = {
+            ATTR_OBJECT_ID: info_config[CONF_NAME],
+            ATTR_NAME: info_config[CONF_FRIENDLY_NAME],
+            ATTR_ENTITIES: [entity_id for entity_id in info_ui]
+            }
+        self._info_ui = info_ui
+        self._tasks = sorted_tasks
+        self._tasks_ids = [entity['entity_id'] for entity in self._tasks[0:info_row_num]]
+        _LOGGER.debug("info: update group:%s",data)
+        yield from self._hass.services.async_call('group', SERVICE_SET, data)
 
 class DelayQueue(object):
     __current_slot = 1
@@ -443,10 +682,11 @@ class DelayQueue(object):
         return delayQueueTask
 
     def remove(self, delayQueueTask):
-        _LOGGER.debug("remove task!!!")
         if delayQueueTask is not None:
-            _LOGGER.debug("remove task in slot {}".format(delayQueueTask.slot))
+            _LOGGER.debug("remove task in slot {}.".format(delayQueueTask.slot))
             self.__queue[delayQueueTask.slot].remove(delayQueueTask)
+        else:
+            _LOGGER.debug("remove task, but not found.")
 
     
     def get_remaining_time(self, delayQueueTask):
@@ -455,7 +695,7 @@ class DelayQueue(object):
                 second = self.__slots_per_loop * (delayQueueTask.loop + 1) + delayQueueTask.slot - (self.__current_slot - 1)
             else:
                 second = self.__slots_per_loop * delayQueueTask.loop + delayQueueTask.slot - (self.__current_slot - 1)
-            return str(timedelta(seconds = second))
+            return timedelta(seconds = second)
         else:
             return None
     
@@ -463,11 +703,11 @@ class DelayQueue(object):
     def read(self):
         if len(self.__queue) >= self.__current_slot:
             tasks = self.__queue[self.__current_slot - 1]
-            _LOGGER.debug("current slot：{}(has {} tasks)".format(self.__current_slot - 1,len(tasks)))
+            
             if tasks:
                 executed_task = []
                 for task in tasks:
-                    _LOGGER.debug("task info:{}/{},should_execute:{}".format(task.slot, task.loop, task.should_exec))
+                    _LOGGER.debug("===task:{}, loop:{}/{}, should_execute:{}===".format(task.task_id, task.slot, task.loop, task.should_exec))
                     if task.should_exec:
                         
                         task.exec_task()
@@ -521,3 +761,40 @@ class DelayQueueTask(object):
     def exec_task(self):
         
         self._exec_task(self._task_id, self._operation, kwargs = self._kwargs)
+
+
+def is_chinese(uchar):
+
+    """判断一个unicode是否是汉字"""
+
+    if uchar >= u'\u4e00' and uchar <= u'\u9fa5':
+
+        return True
+
+    else:
+
+        return False
+
+ 
+
+def align( text, width, just = "left" ):  
+    utext = stext = str(text)
+    
+    cn_count = 0
+    for u in utext:
+        if is_chinese(u):
+            cn_count += 2 
+        else:
+            cn_count += 1  
+    num =int( (width - cn_count) / 2 )
+    blank =int( (width - cn_count) % 2)
+    if just == "right":
+        return chr(12288) * num + " " * blank + stext
+    elif just == "left":
+        return stext + " " * blank + chr(12288) * num
+
+def string_ljust( text, width ):
+    return align( text, width, "left" )
+
+def string_rjust( text, width ):
+    return align( text, width, "right" )
