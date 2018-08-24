@@ -9,7 +9,7 @@ common_timer:
     - input_boolean
   exclude:  # 排除设备，使用entity_id
     - light.test
-  pattern: '[\u4e00-\u9fa5]+'  # 筛选friendly_name包含中文的设备，如果不筛选，设置为'.*'
+  pattern: '[\u4e00-\u9fa5]+'  # 注意：默认筛选friendly_name包含中文的设备，如果不筛选，设置为'.*'
   name: ct_control_panel  # 控制面板的名称，需英文。如果有自定义分组页面，需把对应的group，例如goup.ct_control_panel加到分页
   friendly_name: 通用定时器  # 控制面板别名
   ratio: 5  # 时间比例，只用于周期任务：开⇌关[1:x]表示开状态设置1分钟，则关状态x分钟；关⇌开[1:x]表示关状态设置1分钟，则开状态x分钟
