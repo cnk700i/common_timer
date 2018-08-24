@@ -31,7 +31,7 @@ from homeassistant.components.input_boolean import InputBoolean
 from homeassistant.components.input_text import InputText
 
 _LOGGER = logging.getLogger(__name__)
-# _LOGGER.setLevel(logging.DEBUG)
+_LOGGER.setLevel(logging.DEBUG)
 
 TIME_BETWEEN_UPDATES = timedelta(seconds=1)
 
@@ -50,6 +50,7 @@ UI_INPUT_DURATION = 'input_duration'
 UI_SWITCH = 'switch'
 
 SERVICE_SET = 'set'
+SERVICE_CANCEL = 'cancel'
 
 CONF_OBJECT_ID = 'object_id'
 CONF_UI = 'ui'
@@ -97,6 +98,16 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_RATIO, default=5): cv.positive_int
     })
 }, extra=vol.ALLOW_EXTRA)
+
+ATTR_DURATION = 'duration'
+ATTR_OPERATION = 'operation'
+ATTR_IS_LOOP = 'is_loop'
+COMMON_TIMER_SERVICE_SCHEMA = vol.Schema({
+    vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+    vol.Optional(ATTR_DURATION, default=timedelta(minutes = 30)): cv.time_period,
+    vol.Optional(ATTR_OPERATION, default='off'): cv.string,
+    vol.Optional(ATTR_IS_LOOP, default=False): cv.boolean
+})
 
 BUILT_IN_CONFIG = {
     'ui': {
@@ -310,8 +321,23 @@ def async_setup(hass, config):
                 # _LOGGER.debug('start/stop')
                 if common_timer.stop_loop_task(event.data[ATTR_ENTITY_ID], context = event.context):
                     hass.async_add_job(common_timer.update_info)
-
         hass.bus.async_listen(EVENT_STATE_CHANGED, common_timer_handle)
+
+        @asyncio.coroutine
+        def async_handler_service(service):
+            """ Handle calls to the common timer services. """
+            entity_id = service.data[ATTR_ENTITY_ID]
+            duration = str(service.data[ATTR_DURATION])
+            operation = service.data[ATTR_OPERATION]
+            is_loop = service.data[ATTR_IS_LOOP]
+            if service.service == SERVICE_SET:
+                common_timer.set_task(entity_id, operation, duration, is_loop)
+                pass
+            elif service.service == SERVICE_CANCEL:
+                common_timer.cancel_task(entity_id)
+                pass
+        hass.services.async_register(DOMAIN, SERVICE_SET, async_handler_service, schema=COMMON_TIMER_SERVICE_SCHEMA)
+        hass.services.async_register(DOMAIN, SERVICE_CANCEL, async_handler_service, schema=COMMON_TIMER_SERVICE_SCHEMA)
 
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, start_common_timer)
 
@@ -378,7 +404,7 @@ class CommonTimer:
                     self._store[domain][entity_id]['remaining'] = '0:00:00'
                     self._store[domain][entity_id]['handle'] = None
                     self._store[domain][entity_id]['operation'] = 'on' if domain == 'autonmation' or domain == 'script' else 'off'
-                    self._store[domain][entity_id]['nex_operation'] = None
+                    self._store[domain][entity_id]['next_operation'] = None
                 else:
                     _LOGGER.debug("忽略设备：{}（{}）".format(friendly_name, entity_id))
         options= list(self._store.keys())
@@ -712,6 +738,44 @@ class CommonTimer:
         yield from self._hass.services.async_call('group', SERVICE_SET, data)
         _LOGGER.debug("↑↑↑↑↑_update_info()↑↑↑↑↑")
 
+    def set_task(self, entity_id, operation, duration, is_loop):
+        """ create new task, will overwrite previous task. """
+        _LOGGER.debug('----set_task()-----')
+        task = self._get_task(entity_id)
+        if task is not None:
+            self._queue.remove(task['handle'])
+            task['duration'] = duration
+            task['next_operation'] = operation
+            if is_loop:
+                operation = 'temporary_' + operation
+                state = 'off' if task['next_operation'] == 'on' else 'on'
+                self.set_state(entity_id, state = state, service = 'turn_'+state, force_update = True)
+            task['operation'] = operation
+            task['handle'] = self._queue.insert(entity_id, duration, self.handle_task, operation = operation)  # initialize queue task
+            task['exec_time'] = datetime.now() + self._queue.get_remaining_time(task['handle'])
+            self._hass.async_add_job(self.update_info)  # refresh info panel
+            if self._entity_id == entity_id:
+                self.set_state(self._ui[UI_INPUT_OPERATION], state = self._dic_operation.get(task['operation']))  # reset control panel ui
+                self.set_state(self._ui[UI_INPUT_DURATION], state = task['duration'])
+                self.set_state(self._ui[UI_SWITCH], state = 'on')
+        else:
+            _LOGGER.info('set up task for %s failure', entity_id)
+    
+    def cancel_task(self, entity_id):
+        """ cancel task. """
+        task = self._get_task(entity_id)
+        if task is not None:
+            self._queue.remove(task['handle'])
+            task['handle'] = None
+            task['remaining'] = '0:00:00'
+            #reset frontend
+            if self._entity_id == entity_id:
+                self.set_state(self._ui[UI_SWITCH], state = 'off')
+                self.set_state(self._ui[UI_INPUT_DURATION], state = task['duration'])
+            self._hass.async_add_job(self.update_info)  # refresh info panel
+        else:
+            _LOGGER.info('cancel task of %s failure', entity_id)
+
 class DelayQueue(object):
     """Representation of a queue. """
     __current_slot = 1
@@ -833,13 +897,13 @@ def is_chinese(uchar):
 def align( text, width, just = "left"):
     """ align strings mixed with english and chinese """
     utext = stext = str(text)
-    # utext = stext.decode("utf-8")  #对字符串进行转码
+    # utext = stext.decode("utf-8")
     cn_count = 0
     for u in utext:
         if is_chinese(u):
-            cn_count += 2 # 计算中文字符占用的宽度
+            cn_count += 2 # count chinese chars width
         else:
-            cn_count += 1  # 计算英文字符占用的宽度
+            cn_count += 1  # count english chars width
     num =int( (width - cn_count) / 2 )
     blank =int( (width - cn_count) % 2)
     if just == "right":
