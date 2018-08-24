@@ -31,7 +31,7 @@ from homeassistant.components.input_boolean import InputBoolean
 from homeassistant.components.input_text import InputText
 
 _LOGGER = logging.getLogger(__name__)
-_LOGGER.setLevel(logging.DEBUG)
+# _LOGGER.setLevel(logging.DEBUG)
 
 TIME_BETWEEN_UPDATES = timedelta(seconds=1)
 
