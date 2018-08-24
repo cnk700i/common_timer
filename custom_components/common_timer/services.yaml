@@ -1,0 +1,26 @@
+# Describes the format for available timer services
+
+set:
+  description: 设置任务.
+
+  fields:
+    entity_id:
+      description: 目标设备，面板设备列表里的设备才能控制. [必需]
+      example: 'light.test'
+    duration:
+      description: 倒计时，默认30分钟. [可选]
+      example: '00:01:00 或者 60'
+    operation:
+      description: 开/关操作，默认关. [可选]
+      example: 'on 或者 off'
+    is_loop:
+      description: 是否循环任务，默认不循环. [可选]
+      example: 'true 或者 false'    
+
+cancel:
+  description: 取消任务.
+
+  fields:
+    entity_id:
+      description: 目标设备，面板设备列表里的设备才能控制. [必需]
+      example: 'light.test'
