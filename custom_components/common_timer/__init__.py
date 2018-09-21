@@ -37,6 +37,7 @@ _LOGGER = logging.getLogger(__name__)
 TIME_BETWEEN_UPDATES = timedelta(seconds=1)
 STORAGE_VERSION = 1
 STORAGE_KEY = 'common_timer_tasks'
+
 DOMAIN = 'common_timer'
 DEPENDENCIES = ['group']
 ENTITY_ID_FORMAT = DOMAIN + '.{}'
