@@ -21,6 +21,13 @@ common_timer:
 ```
 >注：如果只配置`common_timer:`，则会默认按上面的样板配置进行设置。
 
+# 使用准备
+  {[HA安装目录]}/components/中的input_select.py、input_text.py、input_boolean.py
+  找到`async def async_setup(hass, config):`里的
+  `component= EntityComponent(_LOGGER, DOMAIN, hass)`
+  更改为
+  `component = hass.data[DOMAIN] = EntityComponent(_LOGGER, DOMAIN, hass)`
+
 # 周期任务时间比例自定义
 面板就不放配置项了，不常用的功能。步骤：
 1、正常运行一次任务，重启保存配置文件
@@ -28,13 +35,12 @@ common_timer:
 3、再重启生效
 
 # 更新日志
+--- ---
 1. 增加点击排序，面板列表的设备，执行多的会排前面。
 
 2. 增加保存任务信息功能，每次HA正常重启会保存到{[HA配置目录]}/.storage/common_timer_tasks。
 
 3. 可自定义设备的周期任务时间比例，方法见上面小节。
-
-
 
 ---v3_0.77.3---
 1. 增加了周期运行任务
