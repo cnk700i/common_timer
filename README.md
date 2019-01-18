@@ -28,6 +28,25 @@ common_timer:
   更改为
   `component = hass.data[DOMAIN] = EntityComponent(_LOGGER, DOMAIN, hass)`
 
+***0.85.1使用方法***
+
+0.85.1版本下使用有两个地方需要调整
+
+1、{[HA安装目录]}/core.py中将service执行完毕通知删除了，使用0.80.0版本的core.py替换
+
+2、{[HA安装目录]}/const.py加入两个变量
+
+EVENT_SERVICE_EXECUTED = 'service_executed'
+
+ATTR_SERVICE_CALL_ID = 'service_call_id'
+
+3、调用service需要对context的user_id进行校对，新建一个用户，将插件中CONTEXT、CONTEXT_IGNORE变量初始化修改为该用户的user_id
+
+CONTEXT = Context('新建的用户id')
+
+CONTEXT_IGNORE = Context('新建的用户id')
+******
+
 # 周期任务时间比例自定义
 面板就不放配置项了，不常用的功能。步骤：
 1、正常运行一次任务，重启保存配置文件
