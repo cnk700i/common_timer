@@ -34,7 +34,7 @@ common_timer:
 
 1、{[HA安装目录]}/core.py中将service执行完毕通知删除了，使用0.80.0版本的core.py替换
 
-2、{[HA安装目录]}/const.py加入两个变量
+2、{[HA安装目录]}/const.py中加入两个变量
 
 EVENT_SERVICE_EXECUTED = 'service_executed'
 
