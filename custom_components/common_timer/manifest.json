@@ -1,0 +1,12 @@
+{
+  "domain": "common_timer",
+  "name": "common_timer",
+  "documentation": "https://ljr.im",
+  "requirements": [],
+  "dependencies": [
+    "group"
+  ],
+  "codeowners": [
+    "@cnk700i"
+  ]
+}

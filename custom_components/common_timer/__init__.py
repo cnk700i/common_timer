@@ -14,10 +14,10 @@ from homeassistant import loader
 from homeassistant import setup
 from homeassistant.core import callback, Context, Event
 
-from homeassistant.components.sensor.template import SensorTemplate
+from homeassistant.components.template.sensor import SensorTemplate, PLATFORM_SCHEMA as SENSOR_TEMPLATE_PLATFORM_SCHEMA
 from homeassistant.const import (
-    ATTR_ENTITY_ID, ATTR_UNIT_OF_MEASUREMENT, CONF_ICON, CONF_NAME, CONF_MODE, EVENT_HOMEASSISTANT_START, EVENT_HOMEASSISTANT_STOP, EVENT_STATE_CHANGED, SERVICE_SELECT_OPTION, SERVICE_TURN_ON, SERVICE_TURN_OFF, EVENT_SERVICE_EXECUTED,
-    ATTR_SERVICE_DATA, ATTR_SERVICE_CALL_ID, ATTR_DOMAIN, ATTR_SERVICE, EVENT_CALL_SERVICE)
+    ATTR_ENTITY_ID, ATTR_UNIT_OF_MEASUREMENT, CONF_ICON, CONF_NAME, CONF_MODE, EVENT_HOMEASSISTANT_START, EVENT_HOMEASSISTANT_STOP, EVENT_STATE_CHANGED, SERVICE_SELECT_OPTION, SERVICE_TURN_ON, SERVICE_TURN_OFF,
+    ATTR_SERVICE_DATA, ATTR_DOMAIN, ATTR_SERVICE, EVENT_CALL_SERVICE)
 
 from homeassistant.helpers.config_validation import time_period_str
 from homeassistant.helpers.event import async_track_time_change,async_call_later
@@ -27,19 +27,17 @@ from homeassistant.helpers import discovery
 from homeassistant.helpers.template import Template
 import homeassistant.helpers.config_validation as cv
 
-from homeassistant.components.input_select import InputSelect
-from homeassistant.components.input_boolean import InputBoolean
-from homeassistant.components.input_text import InputText
+from ..input_select import InputSelect
+from ..input_boolean import InputBoolean
+from ..input_text import InputText
 
 _LOGGER = logging.getLogger(__name__)
-# _LOGGER.setLevel(logging.DEBUG)
 
 TIME_BETWEEN_UPDATES = timedelta(seconds=1)
 STORAGE_VERSION = 1
 STORAGE_KEY = 'common_timer_tasks'
 
 DOMAIN = 'common_timer'
-DEPENDENCIES = ['group']
 ENTITY_ID_FORMAT = DOMAIN + '.{}'
 
 SERVICE_SET_OPTIONS = 'set_options'
@@ -74,6 +72,7 @@ CONF_FRIENDLY_NAME = 'friendly_name'
 CONF_INFO_PANEL = 'info_panel'
 CONF_RATIO = 'ratio'
 CONF_LOOP_FLAG = '⟳'
+CONF_LINKED_USER = 'linked_user'
 
 ATTR_OBJECT_ID = 'object_id'
 ATTR_NAME ='name'
@@ -81,8 +80,9 @@ ATTR_ENTITIES = 'entities'
 ATTR_CALLER = 'caller'
 
 PLATFORM_KEY = ('template', None, 'common_timer')
-CONTEXT = Context('common_timer')
-CONTEXT_IGNORE = Context('common_timer')
+# CONTEXT = Context(user_id = '7bb8269c709c43c894c125dd1647f008')
+CONTEXT = None
+CONTEXT_IGNORE = Context()
 
 INFO_PANEL_SCHEMA = vol.Schema({
     vol.Optional(CONF_NAME, default='ct_info_panel'): cv.string,
@@ -99,7 +99,8 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_FRIENDLY_NAME, default='通用定时器'): cv.string,
         vol.Optional(CONF_INFO_PANEL, default={'name': 'ct_info_panel','friendly_name': '定时任务列表','info_num_min': 1,'info_num_max': 10}): INFO_PANEL_SCHEMA,
         vol.Optional(CONF_PATTERN, default='[\u4e00-\u9fa5]+'): cv.string,
-        vol.Optional(CONF_RATIO, default=5): cv.positive_int
+        vol.Optional(CONF_RATIO, default=5): cv.positive_int,
+        vol.Optional(CONF_LINKED_USER, default='aihome_linked_user'): cv.string
     })
 }, extra=vol.ALLOW_EXTRA)
 
@@ -162,8 +163,8 @@ BUILT_IN_CONFIG = {
             'sensors': {
                 'ct_record_0': {
                     'friendly_name': "无定时任务",
-                    'value_template': Template("-"),
-                    'icon_template': Template("mdi:calendar-check")
+                    'value_template': "-",
+                    'icon_template': "mdi:calendar-check"
                 }
             }
         }]
@@ -234,17 +235,23 @@ def async_setup(hass, config):
                 # _LOGGER.debug("entities:%s", entities)
                 yield from hass.data[setup_domain].async_add_entities(entities)        
                 _LOGGER.debug('initialize component[%s]: entities added.', setup_domain)
+            # sensor should set a unique namespace to ensure it's a new platform and don't affect other entities using template platform which have been initialized.
             elif setup_domain in ['sensor']:   #entity belongs to component.platform 
                 _LOGGER.debug("initialize component.platform[%s]: component is ready, use EntityComponent's method to initialize entity.", setup_domain)
-                # should set a unique namespace to ensure it's a new platform and don't affect other entities using template platform which have been initialized.
-                yield from hass.data[setup_domain].async_setup({setup_domain: VALIDATED_CONF.get(setup_domain, {})})
+                # SCHEMA
+                p_validated = SENSOR_TEMPLATE_PLATFORM_SCHEMA(VALIDATED_CONF.get(setup_domain, {})[0])
+                # _LOGGER.debug('sensor_conf: %s', VALIDATED_CONF.get(setup_domain, {})[0])
+                # _LOGGER.debug('p_validated: %s', p_validated)
+                yield from hass.data[setup_domain].async_setup({setup_domain: p_validated})
             else:
                 _LOGGER.debug("initialize component[%s]: undefined initialize method.", setup_domain)
 
         #add config for HA to initailize
         else:
-            _LOGGER.debug('initialize component[%s]: config hasn\'t this componet , use HA\'s setup method to initialize entity.', setup_domain)
-            hass.async_create_task(setup.async_setup_component(hass, setup_domain, VALIDATED_CONF))
+            _LOGGER.debug('initialize component[%s]: config hasn\'t %s component , use HA\'s setup method to initialize entity.', setup_domain, setup_domain)
+            # _LOGGER.debug('conf: %s', VALIDATED_CONF)
+            # hass.async_create_task(setup.async_setup_component(hass, setup_domain, VALIDATED_CONF))
+            yield from setup.async_setup_component(hass, setup_domain, VALIDATED_CONF)
 
     #add group through service since HA initialize group by defalut
     data = {
@@ -255,7 +262,7 @@ def async_setup(hass, config):
     # data[ATTR_ENTITIES].append('timer.laundry')
     yield from hass.services.async_call('group', SERVICE_SET, data)
     # hass.async_add_job(hass.services.async_call('group', SERVICE_SET, data))
-    _LOGGER.debug('---control planel initialized---')
+    _LOGGER.info('---control planel initialized---')
 
     #info panel inital
     info_config = config[DOMAIN].get(CONF_INFO_PANEL)
@@ -287,7 +294,7 @@ def async_setup(hass, config):
             ATTR_ENTITIES: [entity_id for entity_id in info_ui]
             }
         yield from hass.services.async_call('group', SERVICE_SET, data)
-        _LOGGER.debug('---info planel initialized---')
+        _LOGGER.info('---info planel initialized---')
 
     domains = config[DOMAIN].get(CONF_DOMAINS)
     exclude = config[DOMAIN].get(CONF_EXCLUDE)
@@ -298,7 +305,20 @@ def async_setup(hass, config):
     @asyncio.coroutine
     def start_common_timer(event):
         """ initialize common_timer. """
-        _LOGGER.debug('start initialize common_timer.')
+        _LOGGER.debug('try to get a linked user.')
+        username = config[DOMAIN].get(CONF_LINKED_USER)
+        _LOGGER.debug('linked user providers: %s', hass.auth._providers)
+        if ('homeassistant', None) in hass.auth._providers:
+            credentials = yield from hass.auth._providers[('homeassistant', None)].async_get_or_create_credentials({'username': username})
+            user = yield from hass.auth.async_get_or_create_user(credentials)
+            _LOGGER.debug('linked user: %s', user)
+            global CONTEXT
+            CONTEXT = Context(user.id)
+        else:
+            _LOGGER.error("can't get a linked user, component can't work since no permission to call HA's service to controll target entity.")
+            return
+
+        _LOGGER.info('start initialize common_timer.')
         common_timer = CommonTimer(domains, exclude, pattern, ratio, ui, hass, info_config)
         yield from common_timer.start()
         
@@ -353,31 +373,30 @@ def async_setup(hass, config):
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, stop_common_timer)
 
         # for test
-        service_events = {}
 
-        @asyncio.coroutine
-        def event_to_service_call(event: Event) -> None:
-            if event.context.user_id == DOMAIN:
-                service_events[event.data.get(ATTR_SERVICE_CALL_ID)] = event.data
-        hass.bus.async_listen(EVENT_CALL_SERVICE, event_to_service_call)
+        # service_events = {}
+        # @asyncio.coroutine
+        # def event_to_service_call(event: Event) -> None:
+        #     if event.context.user_id == CONTEXT.id:
+        #         service_events[event.data.get(ATTR_SERVICE_CALL_ID)] = event.data
+        # hass.bus.async_listen(EVENT_CALL_SERVICE, event_to_service_call)
 
+        # @callback
+        # def service_executed(event: Event) -> None:
+        #     call_id = event.data.get(ATTR_SERVICE_CALL_ID)
+        #     s_event = service_events.get(call_id)
+        #     if s_event is not None:
+        #         service_data = s_event.get(ATTR_SERVICE_DATA) or {}
+        #         domain = s_event.get(ATTR_DOMAIN).lower()  # type: ignore
+        #         service = s_event.get(ATTR_SERVICE).lower()  # type: ignore
+        #         # _LOGGER.debug("-----common_timer调用服务完毕！-----context = %s", CONTEXT)
+        #         _LOGGER.debug("service_executed:%s/%s; service_call_id=%s", domain, service,call_id)
+        #         _LOGGER.debug('data:%s', service_data)
+        #         if service_data.get('entity_id') == 'input_select.ct_operation' and service == 'set_options':
+        #             common_timer.refresh_ui()
+        #         service_events.pop(call_id)
 
-        @callback
-        def service_executed(event: Event) -> None:
-            call_id = event.data.get(ATTR_SERVICE_CALL_ID)
-            s_event = service_events.get(call_id)
-            if s_event is not None:
-                service_data = s_event.get(ATTR_SERVICE_DATA) or {}
-                domain = s_event.get(ATTR_DOMAIN).lower()  # type: ignore
-                service = s_event.get(ATTR_SERVICE).lower()  # type: ignore
-                # _LOGGER.debug("-----common_timer调用服务完毕！-----context = %s", CONTEXT)
-                _LOGGER.debug("service_executed:%s/%s; service_call_id=%s", domain, service,call_id)
-                _LOGGER.debug('data:%s', service_data)
-                if service_data.get('entity_id') == 'input_select.ct_operation' and service == 'set_options':
-                    common_timer.refresh_ui()
-                service_events.pop(call_id)
-
-        hass.bus.async_listen(EVENT_SERVICE_EXECUTED, service_executed)        
+        # hass.bus.async_listen(EVENT_SERVICE_EXECUTED, service_executed)
 
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, start_common_timer)
 
@@ -430,7 +449,7 @@ class CommonTimer:
         data =  yield from self._store.async_load()  # load task config from disk
         tasks = {
             user_dict['entity_id']: {'entity_id':user_dict['entity_id'],'duration':user_dict.get('duration','0:00:00'),'operation':user_dict.get('operation','off'),'count':user_dict.get('count',0),'ratio':user_dict.get('ratio',self._ratio)} for user_dict in data['tasks'] if 'entity_id' in user_dict
-        }
+        } if data else {}
         # _LOGGER.debug('[start()] load task config: <tasks=%s>',tasks)
 
         for state in states:
@@ -549,7 +568,7 @@ class CommonTimer:
     
     def switch(self, state):
         """ start or stop task """
-        _LOGGER.debug('switch()')
+        # _LOGGER.debug('switch()')
         if self._domain != '---请选择设备类型---':
             entity_id = self._entity_id
             task = self._get_task(self._entity_id)
@@ -650,7 +669,7 @@ class CommonTimer:
         else:
             domain = entity_id.split('.')[0]
             _LOGGER.debug('call service, entity_id =%s, context = %s',entity_id, context)
-            # 0.78.0 fixed.
+            # unused, after 0.78.0 fixed.
             # attr = self.get_attributes(entity_id)
             # if attributes is not None:
             #     attr.update(attributes)
@@ -918,10 +937,10 @@ class DelayQueue(object):
     def remove(self, delayQueueTask):
         """ remove task from queue """
         if delayQueueTask is not None:
-            _LOGGER.debug("remove task in slot {}.".format(delayQueueTask.slot))
+            _LOGGER.debug("remove task: in slot {}.".format(delayQueueTask.slot))
             self.__queue[delayQueueTask.slot].remove(delayQueueTask)
         else:
-            _LOGGER.debug("remove task, but not found.")
+            _LOGGER.debug("remove task: task has been removed.")
 
     
     def get_remaining_time(self, delayQueueTask):
@@ -943,7 +962,7 @@ class DelayQueue(object):
             if tasks:
                 executed_task = []
                 for task in tasks:
-                    _LOGGER.debug("find {} at loop:{}/{}, exec = {}".format(task.task_id, task.slot, task.loop, task.should_exec))
+                    # _LOGGER.debug("find {} at loop:{}/{}, exec = {}".format(task.task_id, task.slot, task.loop, task.should_exec))
                     if task.should_exec:
                         task.exec_task()
                         executed_task.append(task)
