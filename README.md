@@ -21,32 +21,6 @@ common_timer:
 ```
 >注：如果只配置`common_timer:`，则会默认按上面的样板配置进行设置。
 
-# 使用准备
-  {[HA安装目录]}/components/中的input_select.py、input_text.py、input_boolean.py
-  找到`async def async_setup(hass, config):`里的
-  `component= EntityComponent(_LOGGER, DOMAIN, hass)`
-  更改为
-  `component = hass.data[DOMAIN] = EntityComponent(_LOGGER, DOMAIN, hass)`
-
-***0.85.1使用方法***
-
-0.85.1版本下使用有两个地方需要调整
-
-1、{[HA安装目录]}/core.py中将service执行完毕通知删除了，使用0.80.0版本的core.py替换
-
-2、{[HA安装目录]}/const.py中加入两个变量
-
-EVENT_SERVICE_EXECUTED = 'service_executed'
-
-ATTR_SERVICE_CALL_ID = 'service_call_id'
-
-3、调用service需要对context的user_id进行校对，新建一个用户，将插件中CONTEXT、CONTEXT_IGNORE变量初始化修改为该用户的user_id
-
-CONTEXT = Context('新建的用户id')
-
-CONTEXT_IGNORE = Context('新建的用户id')
-******
-
 # 周期任务时间比例自定义
 面板就不放配置项了，不常用的功能。步骤：
 1、正常运行一次任务，重启保存配置文件
@@ -55,6 +29,9 @@ CONTEXT_IGNORE = Context('新建的用户id')
 
 # 更新日志
 --- ---
+1. 适配0.92.1
+
+---v3_0.85.1_temp ---
 1. 增加点击排序，面板列表的设备，执行多的会排前面。
 
 2. 增加保存任务信息功能，每次HA正常重启会保存到{[HA配置目录]}/.storage/common_timer_tasks。
