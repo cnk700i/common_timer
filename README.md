@@ -1,3 +1,6 @@
+# 备注
+使用说明见[个人blog](https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/)
+
 # 更新日志
 ---当前---
 1. 适配0.92.1
