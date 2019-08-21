@@ -53,8 +53,9 @@ common_timer:
 ```
 >注：如果只配置`common_timer:`，则会默认按上面的样板配置进行设置;使用lovelace界面请设置info_num_min、info_num_max为一样。
 ## 关于input_select、input_text、input_boolean组件说明
-如Home Assistant后续版本更新了以上三个组件，可按以下方法进行更新：
-1. 复制{[HA安装目录]}/components/中的input_select、input_text、input_boolean组件拷贝到{[HA配置目录]}/custom_components目录下
+新版本插件将input_select、input_text、input_boolean也放了进来，这样不用改安装目录下这三个文件，避免升级版本后修改失效；也更方便使用docker部署方式修改，docker部署方式一般只映射配置目录。如Home Assistant后续版本更新了以上三个组件，可按以下方法进行更新：
+1. 找到组件文件：安装后在{[HA安装目录]}/components/；或者去官方github相应的版本分支（tags）/homeassistant/components/
+2. 拷贝组件到{[HA配置目录]}/custom_components目录下
 2. 找到各自目录里的__init__.py，将`async def async_setup(hass, config):`中的 `component= EntityComponent(_LOGGER, DOMAIN, hass)` 更改为 `component = hass.data[DOMAIN] = EntityComponent(_LOGGER, DOMAIN, hass)`
 
 # 周期任务时间比例自定义
