@@ -51,7 +51,7 @@ common_timer:
     info_num_min: 1  # 任务列表面板常驻显示最小行
     info_num_max: 10  # 任务列表面板常驻显示最大行。注：如果最大最小设置一致，则常驻显示
 ```
->注：如果只配置`common_timer:`，则会默认按上面的样板配置进行设置。
+>注：如果只配置`common_timer:`，则会默认按上面的样板配置进行设置;使用lovelace界面请设置info_num_min、info_num_max为一样。
 ## 关于input_select、input_text、input_boolean组件说明
 如Home Assistant后续版本更新了以上三个组件，可按以下方法进行更新：
 1. 复制{[HA安装目录]}/components/中的input_select、input_text、input_boolean组件拷贝到{[HA配置目录]}/custom_components目录下
