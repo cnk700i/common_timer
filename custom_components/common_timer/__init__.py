@@ -1,12 +1,13 @@
 """
 author: cnk700i
 blog: ljr.im
+tested simplely On HA version: 0.97.2
 """
 import asyncio
 import logging
 import voluptuous as vol
 import re
-import time
+import time,json
 from datetime import datetime,timedelta
 import operator
 
@@ -80,7 +81,6 @@ ATTR_ENTITIES = 'entities'
 ATTR_CALLER = 'caller'
 
 PLATFORM_KEY = ('template', None, 'common_timer')
-# CONTEXT = Context(user_id = '7bb8269c709c43c894c125dd1647f008')
 CONTEXT = None
 CONTEXT_IGNORE = Context()
 
@@ -406,6 +406,7 @@ def async_setup(hass, config):
 class CommonTimer:
     """Representation of a common timer."""
     def __init__(self, domains, exclude, pattern, ratio, ui, hass = None, info_config = None):
+        _LOGGER.debug('--------------CONTEXT: %s', CONTEXT)
         """Initialize a common timer."""
         self._domains = domains
         self._exclude = exclude
@@ -658,17 +659,19 @@ class CommonTimer:
         else:
             return None
 
-    def set_state(self, entity_id, state = None, attributes = None, service = None, force_update = False, context = CONTEXT):
+    def set_state(self, entity_id, state = None, attributes = None, service = None, force_update = False, context = None):
         """ set entity state. """
-        _LOGGER.debug("handle set_state(): entity_id= {},from {} to {}".format(entity_id, self.get_state(entity_id), state))
+        if context is None:
+            context = CONTEXT
         if service is None:
+            _LOGGER.debug("[set_state] state machine: entity_id= {}, from {} to {}, context = {}".format(entity_id, self.get_state(entity_id), state, context))
             attr = self.get_attributes(entity_id)
             if attributes is not None:
                 attr.update(attributes)
             self._hass.states.async_set(entity_id, state, attr, force_update = force_update, context = context)
         else:
             domain = entity_id.split('.')[0]
-            _LOGGER.debug('call service, entity_id =%s, context = %s',entity_id, context)
+            _LOGGER.debug('[set_state] call service: entity_id =%s, context = %s',entity_id, context)
             # unused, after 0.78.0 fixed.
             # attr = self.get_attributes(entity_id)
             # if attributes is not None:
@@ -723,31 +726,44 @@ class CommonTimer:
         """ handle task when time arrive.
             if handler take long time, use hass.async_add_job(func) to exec in another thread. 
         """
-        _LOGGER.debug("handle_task(%s): operation = %s.", entity_id, operation)
+        _LOGGER.debug("[handle_task] :entity_id = %s, operation = %s.", entity_id, operation)
         task = self._get_task(entity_id)
         task['handle'] = None
         task['remaining'] = '0:00:00'
-
-        if operation == 'temporary_on':
-            ratio = self._ratio if task['operation'] == operation else 1
-            delay =int(time_period_str(task['duration']).total_seconds()*ratio)
-            task['handle'] = self._queue.insert(entity_id, str(timedelta(seconds = delay)), self.handle_task, 'temporary_off')
-            task['next_operation'] = 'off'
-            task['exec_time'] = datetime.now() + self._queue.get_remaining_time(task['handle'])
-            operation = 'on'
-        elif operation == 'temporary_off':
-            ratio = self._ratio if task['operation'] == operation else 1
-            delay =int(time_period_str(task['duration']).total_seconds()*ratio)
-            task['handle'] = self._queue.insert(entity_id, str(timedelta(seconds = delay)), self.handle_task, 'temporary_on')
-            task['next_operation'] = 'on'
-            task['exec_time'] = datetime.now() + self._queue.get_remaining_time(task['handle'])
-            operation = 'off'            
-        elif operation == 'custom':
-            pass
-        service = 'turn_'+operation
-        state = operation
-        self.set_state(entity_id, service = service, force_update = True)
-        _LOGGER.debug("handle_task finish:{}({})".format(service,entity_id))
+        if 'aihome_actions' in operation:
+            try:
+                translation = lambda state, action:([cmnd[0] for cmnd in state.attributes['aihome_actions'][action]], [cmnd[1] for cmnd in state.attributes['aihome_actions'][action]], [json.loads(cmnd[2]) for cmnd in state.attributes['aihome_actions'][action]]) if state.attributes.get('aihome_actions') else (['input_boolean'], ['turn_on'], [{}])
+                action = operation.replace('aihome_actions_','')
+                domain_list, service_list, data_list = translation(self._hass.states.get(entity_id), action)
+                _LOGGER.debug('domain_list: %s', domain_list)
+                _LOGGER.debug('service_list: %s', service_list)
+                _LOGGER.debug('data_list: %s', data_list)
+                for i in range(len(domain_list)):
+                    _LOGGER.debug('domain: %s, servcie: %s, data: %s', domain_list[i], service_list[i], data_list[i])
+                    self._hass.async_add_job(self._hass.services.async_call(domain_list[i], service_list[i], data_list[i], context = CONTEXT))
+                _LOGGER.debug("handle_task with aihome_actions finish.")
+            except:
+                import traceback
+                _LOGGER.error('[handle_task] %s', traceback.format_exc())
+        else:
+            if operation == 'temporary_on':
+                ratio = self._ratio if task['operation'] == operation else 1
+                delay =int(time_period_str(task['duration']).total_seconds()*ratio)
+                task['handle'] = self._queue.insert(entity_id, str(timedelta(seconds = delay)), self.handle_task, 'temporary_off')
+                task['next_operation'] = 'off'
+                task['exec_time'] = datetime.now() + self._queue.get_remaining_time(task['handle'])
+                operation = 'on'
+            elif operation == 'temporary_off':
+                ratio = self._ratio if task['operation'] == operation else 1
+                delay =int(time_period_str(task['duration']).total_seconds()*ratio)
+                task['handle'] = self._queue.insert(entity_id, str(timedelta(seconds = delay)), self.handle_task, 'temporary_on')
+                task['next_operation'] = 'on'
+                task['exec_time'] = datetime.now() + self._queue.get_remaining_time(task['handle'])
+                operation = 'off'
+            service = 'turn_'+operation
+            state = operation
+            self.set_state(entity_id, service = service, force_update = True)
+            _LOGGER.debug("handle_task finish:{}({})".format(service,entity_id))
         # self._hass.async_add_job(self.long_time_task)  # for test
 
     def long_time_task(self):
@@ -778,8 +794,8 @@ class CommonTimer:
         if self._get_index_of_running_tasks(entity_id) is not None:
             task = self._get_task(entity_id)
             #if loop task and who operated
-            if 'temporary' in task['operation'] and context != CONTEXT:
-                _LOGGER.debug("operated by other method. <entity_id = %s, context = %s>", entity_id, context)
+            if 'temporary' in task['operation'] and context.user_id != CONTEXT.user_id:
+                _LOGGER.debug("operated by other method. <entity_id = %s, context = %s, common_timer context = %s>", entity_id, context, CONTEXT)
                 #clear task info
                 self._queue.remove(task['handle'])
                 task['handle'] = None
