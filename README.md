@@ -2,6 +2,8 @@
 使用说明见[个人blog](https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/)
 
 # 更新日志
+2019-08-23
+1. HA 0.97.2版本下测试，为小度音箱定时控制调用自定义服务增加功能支持、修复循环控制失效bug。
 ---当前---
 1. 适配0.92.1，使用lovelace界面请设置info_num_min、info_num_max为一样。
 
