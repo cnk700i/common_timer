@@ -66,4 +66,12 @@ common_timer:
 2、{[HA配置目录]}/.storage/common_timer_tasks，在tasks:{}里面修改对应的entity_id的ratio值即可
 3、再重启生效
 
-
+# 调试
+插件无法工作可设置插件日志debug级别以观察调试消息。
+```yaml
+# {HA配置目录}/configuration.yaml
+logger:
+  default: critical # 默认日志级别，调试完后改回info（预设）
+  logs:
+    custom_components.common_timer: debug
+```
