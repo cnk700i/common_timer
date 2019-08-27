@@ -45,6 +45,8 @@ SERVICE_SET_OPTIONS = 'set_options'
 SERVICE_SET_VALUE = 'set_value'
 SERVICE_SELECT_OPTION = 'select_option'
 
+DOMAIN_SERVICE_WITHOUT_ENTITY_ID = ['climate']
+
 UI_INPUT_DOMAIN = 'input_domain'
 UI_INPUT_ENTITY = 'input_entity'
 UI_INPUT_OPERATION = 'input_operation'
@@ -74,11 +76,14 @@ CONF_INFO_PANEL = 'info_panel'
 CONF_RATIO = 'ratio'
 CONF_LOOP_FLAG = '⟳'
 CONF_LINKED_USER = 'linked_user'
+CONF_INTERRUPT_LOOP = 'interrupt_loop'
 
 ATTR_OBJECT_ID = 'object_id'
 ATTR_NAME ='name'
 ATTR_ENTITIES = 'entities'
 ATTR_CALLER = 'caller'
+
+DEFAULT_OPERATION_OPTIONS =  ['开','关','开⇌关 [1:5]','关⇌开 [1:5]', '调服务']
 
 PLATFORM_KEY = ('template', None, 'common_timer')
 CONTEXT = None
@@ -100,19 +105,23 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_INFO_PANEL, default={'name': 'ct_info_panel','friendly_name': '定时任务列表','info_num_min': 1,'info_num_max': 10}): INFO_PANEL_SCHEMA,
         vol.Optional(CONF_PATTERN, default='[\u4e00-\u9fa5]+'): cv.string,
         vol.Optional(CONF_RATIO, default=5): cv.positive_int,
-        vol.Optional(CONF_LINKED_USER, default='aihome_linked_user'): cv.string
+        vol.Optional(CONF_LINKED_USER, default='common_timer_linked_user'): cv.string,
+        vol.Optional(CONF_INTERRUPT_LOOP, default=False): cv.boolean,
     })
 }, extra=vol.ALLOW_EXTRA)
 
 ATTR_DURATION = 'duration'
 ATTR_OPERATION = 'operation'
 ATTR_IS_LOOP = 'is_loop'
+
 COMMON_TIMER_SERVICE_SCHEMA = vol.Schema({
     vol.Required(ATTR_ENTITY_ID): cv.entity_id,
     vol.Optional(ATTR_DURATION, default=timedelta(minutes = 30)): cv.time_period,
     vol.Optional(ATTR_OPERATION, default='off'): cv.string,
     vol.Optional(ATTR_IS_LOOP, default=False): cv.boolean
 })
+
+
 
 BUILT_IN_CONFIG = {
     'ui': {
@@ -133,7 +142,7 @@ BUILT_IN_CONFIG = {
             },
             'ct_operation': {
                 'name': '操作',
-                'options': ['开','关','开⇌关 [1:5]','关⇌开 [1:5]'],
+                'options': DEFAULT_OPERATION_OPTIONS,
                 'initial': '关',
                 'icon': 'mdi:nintendo-switch',
                 'use_for': 'input_operation'
@@ -322,6 +331,7 @@ def async_setup(hass, config):
         common_timer = CommonTimer(domains, exclude, pattern, ratio, ui, hass, info_config)
         yield from common_timer.start()
         
+        interrupt_loop = config[DOMAIN].get(CONF_INTERRUPT_LOOP)
         @callback
         def common_timer_handle(event):
             """Listen for state changed events and refresh ui. """
@@ -341,10 +351,10 @@ def async_setup(hass, config):
                 # common_timer.input_duration(event.data['new_state'].as_dict()['state'])
             elif event.data[ATTR_ENTITY_ID] == ui[UI_SWITCH]:
                 # _LOGGER.debug('start/stop')
-                common_timer.switch(event.data['new_state'].as_dict()['state'])
+                common_timer.switch(event.data['new_state'].as_dict()['state'], context = event.context)
             else:
                 # _LOGGER.debug('stop_loop_task')
-                if common_timer.stop_loop_task(event.data[ATTR_ENTITY_ID], context = event.context):
+                if interrupt_loop and common_timer.stop_loop_task(event.data[ATTR_ENTITY_ID], context = event.context):
                     hass.async_add_job(common_timer.update_info)
         hass.bus.async_listen(EVENT_STATE_CHANGED, common_timer_handle)
 
@@ -417,15 +427,22 @@ class CommonTimer:
         self._tasks = {}
         self._store = hass.helpers.storage.Store(STORAGE_VERSION, STORAGE_KEY)
         self._dic_friendly_name = {}
-        self._dic_operation = {
+        self._dic_operation_en_to_cn = {
             'on':'开',
             'off':'关',
             'temporary_on':'关⇌开',
             'temporary_off': '开⇌关',
-            '关⇌开':'temporary_on',
-            '开⇌关': 'temporary_off',            
-            '开':'on',
-            '关':'off'}
+            'custom:*': '调服务'
+        }
+        self._dic_operation_cn_to_en = {v : k for k, v in self._dic_operation_en_to_cn.items()}
+        self._dic_domain_en_to_cn = {
+            'light': '灯',
+            'switch': '开关',
+            'input_boolean': '二元选择器',
+            'automation': '自动化',
+            'script': '脚本'
+        }
+        self._dic_domain_cn_to_en = {v : k for k, v in self._dic_domain_en_to_cn.items()}
         self._dic_icon = {'light': 'mdi:lightbulb', 'switch': 'mdi:toggle-switch', 'automation': 'mdi:playlist-play', 'script': 'mdi:script', 'input_boolean': 'mdi:toggle-switch'}
         self._domain = None
         self._entity_id = None
@@ -483,7 +500,7 @@ class CommonTimer:
                         self._tasks[domain][entity_id]['ratio'] = self._ratio
                 else:
                     _LOGGER.debug("忽略设备：{}（{}）".format(friendly_name, entity_id))
-        options= list(self._tasks.keys())
+        options = [self._dic_domain_en_to_cn.get(d) for d in self._tasks.keys()]
         options.insert(0,'---请选择设备类型---')
         data = {
             'entity_id':self._ui[UI_INPUT_DOMAIN],
@@ -516,6 +533,8 @@ class CommonTimer:
 
     def choose_domain(self, domain):
         """refresh entity input list """
+
+        domain = self._dic_domain_cn_to_en.get(domain, domain)
         self._domain = domain
         if domain == '---请选择设备类型---':
             options = ['---请选择设备---']
@@ -524,7 +543,7 @@ class CommonTimer:
             options = [self._get_task(entity['entity_id'])['friendly_name'] for entity in sorted(entities, key = operator.itemgetter('count'), reverse = True)]  #show friendly_name
             options.insert(0,'---请选择设备---')
         self.set_options(self._ui[UI_INPUT_ENTITY], options)
-        # self.set_options(self._ui[UI_INPUT_OPERATION], ['开','关','开⇌关 [1:5]','关⇌开 [1:5]'])
+        # self.set_options(self._ui[UI_INPUT_OPERATION], DEFAULT_OPERATION_OPTIONS)
     
     def choose_entity(self, friendly_name):
         """ load entity task params and set ui."""
@@ -533,8 +552,8 @@ class CommonTimer:
             self._entity_id = None
             self.set_state(self._ui[UI_INPUT_DURATION], state= '0:00:00')
             self.set_state(self._ui[UI_SWITCH], state = 'off')
-            self.set_options(self._ui[UI_INPUT_OPERATION], ['开','关','开⇌关 [1:5]','关⇌开 [1:5]'])
-            # self.set_state(self._ui[UI_INPUT_OPERATION], state = {'option': '关'}, service = 'select_option', context = CONTEXT_IGNORE)
+            self.set_options(self._ui[UI_INPUT_OPERATION], DEFAULT_OPERATION_OPTIONS)
+            self.set_state(self._ui[UI_INPUT_OPERATION], state = {'option': '关'}, service = 'select_option', context = CONTEXT_IGNORE)
         else:
             entity_id = self._entity_id = self._dic_friendly_name.get(friendly_name, None)
             task = self._get_task(entity_id)
@@ -552,10 +571,9 @@ class CommonTimer:
                 self.set_state(self._ui[UI_INPUT_DURATION], state= duration)
                 self.set_state(self._ui[UI_SWITCH], state = 'off')
 
-            # self.set_state(self._ui[UI_INPUT_OPERATION], state = {'option': '关'}, service = 'select_option', context = CONTEXT_IGNORE)
-            options = ['开','关','开⇌关 [1:{}]'.format(task['ratio']),'关⇌开 [1:{}]'.format(task['ratio'])]
+            options = ['开','关','开⇌关 [1:{}]'.format(task['ratio']),'关⇌开 [1:{}]'.format(task['ratio']), '调服务']
             self.set_options(self._ui[UI_INPUT_OPERATION], options)
-            # self.set_state(self._ui[UI_INPUT_OPERATION], state = {'option': self.get_operation(task = task)}, service = 'select_option')
+            self.set_state(self._ui[UI_INPUT_OPERATION], state = {'option': self.get_operation(task = task)}, service = 'select_option', context = CONTEXT_IGNORE)
 
     def choose_operation(self, operation, context = None):
         """ set operation param """
@@ -563,11 +581,12 @@ class CommonTimer:
         if task is None:
             _LOGGER.debug("no entity selected, pass.")
             return
-        # save operation if task is not running, besides set options will cause a operation change.
+
+        # save operation if task is not running, besides setting options will cause a operation change.
         if self.get_state(self._ui[UI_SWITCH]) == 'off' and context != CONTEXT_IGNORE:
             task['operation'] = self.get_operation(ui_operation = operation)
     
-    def switch(self, state):
+    def switch(self, state, context = None):
         """ start or stop task """
         # _LOGGER.debug('switch()')
         if self._domain != '---请选择设备类型---':
@@ -590,7 +609,7 @@ class CommonTimer:
                         if task['remaining'] != duration:
                             task['duration'] = duration  # set duration attr
                         task['handle'] = self._queue.insert(entity_id, duration, self.handle_task, operation = operation)  # initialize queue task
-                        task['operation'] = operation  #set operation attr
+                        task['operation'] = operation #set operation attr                            
 
                         # sync state for loop task
                         if 'temporary' in operation:
@@ -606,10 +625,10 @@ class CommonTimer:
                     self._queue.remove(task['handle'])
                     task['handle'] = None
                     task['next_operation'] = None
-                    if 'temporary' not in task['operation']:
-                        task['remaining'] = duration
-                    else:
+                    if 'temporary' in task['operation']:
                         task['remaining'] = '0:00:00'
+                    else:
+                        task['remaining'] = duration
                         self.set_state(self._ui[UI_INPUT_DURATION], state = task['duration'])  # reset control panel ui
                     _LOGGER.debug("---switch---")
                     self.set_state(self._ui[UI_INPUT_OPERATION], state = self.get_operation(task = task))  # reset control panel ui
@@ -617,7 +636,8 @@ class CommonTimer:
         else:
             _LOGGER.debug("no device type selected")
             self.set_state(self._ui[UI_SWITCH], state = 'off')
-        self._hass.async_add_job(self.update_info)  # refresh info panel
+        if context != CONTEXT_IGNORE: # UI_SWITCH will be reset after a task finish, this shouldn't trigger a update twice
+            self._hass.async_add_job(self.update_info)  # refresh info panel
 
     def _get_task(self, entity_id):
         """ return task base info  """
@@ -633,15 +653,18 @@ class CommonTimer:
         """ transform operation string between ui and task"""
         if ui_operation is not None:
             # _LOGGER.debug("get_operation from ui:{}|{}".format(ui_operation,self._dic_operation.get(ui_operation.split(' ')[0])))
-            return self._dic_operation.get(ui_operation.split(' ')[0])
+            return self._dic_operation_cn_to_en.get(ui_operation.split(' ')[0])
         if task is not None:
+            if 'custom:' in task['operation']:
+                return '调服务'
             if task['operation'] in ['on','off']:
                 # _LOGGER.debug("get_operation from task:{}|{}".format(task['operation'],self._dic_operation.get(task['operation'])))
-                return self._dic_operation.get(task['operation'])
+                return self._dic_operation_en_to_cn.get(task['operation'])
             else:
                 # _LOGGER.debug("get_operation from task:{}|{}".format(task['operation'],'{} [1:{}]'.format(self._dic_operation.get(task['operation']),task['ratio'])))
-                return '{} [1:{}]'.format(self._dic_operation.get(task['operation']),task['ratio'])
-        return None
+                return '{} [1:{}]'.format(self._dic_operation_en_to_cn.get(task['operation']),task['ratio'])
+        else:
+            return '关'
 
     def get_state(self, entity_id):
         """ return entity state. """
@@ -716,32 +739,53 @@ class CommonTimer:
                     self.set_state(self._ui[UI_INPUT_DURATION], state = task['duration'])
                 else:
                     self.set_state(self._ui[UI_INPUT_DURATION], state = str(remaining_time))
-                self.set_state(self._ui[UI_SWITCH], state = 'off')
+                self.set_state(self._ui[UI_SWITCH], state = 'off', context = CONTEXT_IGNORE)
             # task waite
             else:
                 self.set_state(self._ui[UI_INPUT_DURATION], state = str(remaining_time))
 
     # @asyncio.coroutine
-    def handle_task(self, entity_id, operation, **kwargs):
+    def handle_task(self, entity_id, command, **kwargs):
         """ handle task when time arrive.
             if handler take long time, use hass.async_add_job(func) to exec in another thread. 
         """
-        _LOGGER.debug("[handle_task] :entity_id = %s, operation = %s.", entity_id, operation)
+        _LOGGER.debug("[handle_task] start: entity_id = %s, command = %s.", entity_id, command)
         task = self._get_task(entity_id)
         task['handle'] = None
         task['remaining'] = '0:00:00'
-        if 'aihome_actions' in operation:
+        if 'custom:' not in command:
+            command = 'standard:'+command
+        mode = command.split(':')[0]
+        operation = command.split(':')[1]
+
+        if mode == 'custom':
             try:
-                translation = lambda state, action:([cmnd[0] for cmnd in state.attributes['aihome_actions'][action]], [cmnd[1] for cmnd in state.attributes['aihome_actions'][action]], [json.loads(cmnd[2]) for cmnd in state.attributes['aihome_actions'][action]]) if state.attributes.get('aihome_actions') else (['input_boolean'], ['turn_on'], [{}])
-                action = operation.replace('aihome_actions_','')
-                domain_list, service_list, data_list = translation(self._hass.states.get(entity_id), action)
+                if operation == '*':
+                    _LOGGER.debug('[handle_task] custom mode: entity has no custom command, skip')
+                    return
+                try:
+                    cmnds = self.get_attributes(entity_id)
+                    for attr in operation.split('/'):
+                        cmnds = cmnds[attr]
+                    _LOGGER.debug('[handle_task] custom mode: get custom command %s', cmnds)
+                except:
+                    _LOGGER.error('[handle_task] custom mode: entity has no attr %s', operation)
+                    return
+                if not isinstance(cmnds, list) or len(cmnds[0]) != 3:
+                    _LOGGER.error('[handle_task] custom mode: service command format error %s', cmnds)
+                    return
+                translation = lambda cmnds:([cmnd[0] for cmnd in cmnds], [cmnd[1] for cmnd in cmnds], [json.loads(cmnd[2]) for cmnd in cmnds])
+                domain_list, service_list, data_list = translation(cmnds)
                 _LOGGER.debug('domain_list: %s', domain_list)
                 _LOGGER.debug('service_list: %s', service_list)
                 _LOGGER.debug('data_list: %s', data_list)
+                for i,d in enumerate(data_list):
+                    if 'entity_id' not in d and domain_list[i] not in DOMAIN_SERVICE_WITHOUT_ENTITY_ID:
+                        d.update({"entity_id": entity_id })
                 for i in range(len(domain_list)):
                     _LOGGER.debug('domain: %s, servcie: %s, data: %s', domain_list[i], service_list[i], data_list[i])
                     self._hass.async_add_job(self._hass.services.async_call(domain_list[i], service_list[i], data_list[i], context = CONTEXT))
-                _LOGGER.debug("handle_task with aihome_actions finish.")
+                _LOGGER.debug("[handle_task] with aihome_actions finish.")
             except:
                 import traceback
                 _LOGGER.error('[handle_task] %s', traceback.format_exc())
@@ -763,7 +807,8 @@ class CommonTimer:
             service = 'turn_'+operation
             state = operation
             self.set_state(entity_id, service = service, force_update = True)
-            _LOGGER.debug("handle_task finish:{}({})".format(service,entity_id))
+            _LOGGER.debug("[handle_task] finish:{}({})".format(service,entity_id))
+        self._hass.async_add_job(self.update_info)
         # self._hass.async_add_job(self.long_time_task)  # for test
 
     def long_time_task(self):
@@ -839,8 +884,11 @@ class CommonTimer:
                 _LOGGER.debug("info_entity:%s, row=%s",info_entity, row)
                 # info1 = '{0:{2}<12}{1:{2}>20}'.format(running_tasks[row]['friendly_name'], running_tasks[row]['exec_time'].strftime("%Y-%m-%d %H:%M:%S"),chr(12288))  # for test
                 info1 = '{}{}'.format(align(running_tasks[row]['friendly_name'],20), align(running_tasks[row]['exec_time'].strftime("%Y-%m-%d %H:%M:%S"),20))  # name+time info template
-                loop_flag = CONF_LOOP_FLAG if 'temporary' in running_tasks[row]['operation'] else ''
-                info2 = Template('{} {} → {}'.format(loop_flag, self.get_state(running_tasks[row]['entity_id']), running_tasks[row]['next_operation']))  # operation info template
+                if 'custom:' in running_tasks[row]['operation']:
+                    info2 = Template('call service')  # operation info template
+                else:
+                    loop_flag = CONF_LOOP_FLAG if 'temporary' in running_tasks[row]['operation'] else ''
+                    info2 = Template('{} {} → {}'.format(loop_flag, self.get_state(running_tasks[row]['entity_id']), running_tasks[row]['next_operation']))  # operation info template
                 info2.hass = self._hass
                 # info3 = Template('{{{{states.{}.{}.{}}}}}'.format(running_tasks[row]['entity_id'] ,'attributes' ,'icon'))  # for test
                 info3 = Template(running_tasks[row]['icon'])  # icon template
@@ -898,7 +946,7 @@ class CommonTimer:
             self._queue.remove(task['handle'])
             task['duration'] = duration
             task['next_operation'] = operation
-            if is_loop:
+            if is_loop and 'custom:' not in operation:
                 operation = 'temporary_' + operation
                 state = 'off' if task['next_operation'] == 'on' else 'on'
                 self.set_state(entity_id, service = 'turn_'+state, force_update = True)
