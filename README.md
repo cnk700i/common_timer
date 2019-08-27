@@ -2,6 +2,10 @@
 使用说明见[个人blog](https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/)
 
 # 更新日志
+2019-08-27
+1. 完善调用自定义服务功能。
+2. 增加外部操作中断循环任务配置项。
+3. 调式修复若干bug。
 2019-08-23
 1. HA 0.97.2版本下测试，为小度音箱定时控制调用自定义服务增加功能支持、修复循环控制失效bug。
 ---当前---
@@ -52,6 +56,8 @@ common_timer:
     friendly_name: 定时任务列表  #任务面板别名
     info_num_min: 1  # 任务列表面板常驻显示最小行
     info_num_max: 10  # 任务列表面板常驻显示最大行。注：如果最大最小设置一致，则常驻显示
+  linked_user: common_timer_linked_user # 插件关联用户名，由插件自动创建，用于解决控制需要权限问题
+  interrupt_loop: False # 外部操作是否中断循环任务
 ```
 >注：如果只配置`common_timer:`，则会默认按上面的样板配置进行设置;使用lovelace界面请设置info_num_min、info_num_max为一样。
 ## 关于input_select、input_text、input_boolean组件说明
