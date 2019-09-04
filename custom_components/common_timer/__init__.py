@@ -27,6 +27,7 @@ from homeassistant.helpers import config_per_platform, discovery
 from homeassistant.helpers import discovery
 from homeassistant.helpers.template import Template
 import homeassistant.helpers.config_validation as cv
+from homeassistant.auth.const import GROUP_ID_ADMIN
 
 from ..input_select import InputSelect
 from ..input_boolean import InputBoolean
@@ -315,17 +316,18 @@ def async_setup(hass, config):
     def start_common_timer(event):
         """ initialize common_timer. """
         _LOGGER.debug('try to get a linked user.')
+        global CONTEXT
         username = config[DOMAIN].get(CONF_LINKED_USER)
-        _LOGGER.debug('linked user providers: %s', hass.auth._providers)
-        if ('homeassistant', None) in hass.auth._providers:
-            credentials = yield from hass.auth._providers[('homeassistant', None)].async_get_or_create_credentials({'username': username})
-            user = yield from hass.auth.async_get_or_create_user(credentials)
-            _LOGGER.debug('linked user: %s', user)
-            global CONTEXT
+        users = yield from hass.auth.async_get_users()
+        for user in users:
+            if user.name == username:
+                CONTEXT = Context(user.id)
+                _LOGGER.info("get a linked user.")
+                break
+        if CONTEXT is None:
+            user = yield from  hass.auth.async_create_system_user(username, [GROUP_ID_ADMIN])
             CONTEXT = Context(user.id)
-        else:
-            _LOGGER.error("can't get a linked user, component can't work since no permission to call HA's service to controll target entity.")
-            return
+            _LOGGER.info("create a linked user for component.")
 
         _LOGGER.info('start initialize common_timer.')
         common_timer = CommonTimer(domains, exclude, pattern, ratio, ui, hass, info_config)
