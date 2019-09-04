@@ -2,6 +2,9 @@
 使用说明见[个人blog](https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/)
 
 # 更新日志
+2019-09-04
+1. 使用新方法创建内置用户。
+
 2019-08-27
 1. 完善调用自定义服务功能，支持使用common_timer.set设置。
 2. 增加外部操作中断循环任务配置项。
