@@ -1,7 +1,7 @@
 """
 author: cnk700i
 blog: ljr.im
-tested simplely On HA version: 0.97.2
+tested simplely On HA version: 0.98.3
 """
 import asyncio
 import logging
@@ -214,7 +214,7 @@ def async_setup(hass, config):
     components = set(key.split(' ')[0] for key in config.keys())
     for setup_domain in ['input_select', 'input_text', 'input_boolean', 'sensor']:
         #config file contains info, let HA initailize 
-        if setup_domain in components:
+        if setup_domain in components or setup_domain in hass.data:
             _LOGGER.debug('initialize component[%s]: config has this component', setup_domain)
             #wait for HA initialize component
             #maybe it can use discovery.discover(hass, service='load_component.{}'.format(setup_domain), discovered={}, component=setup_domain, hass_config=config) instead
@@ -223,7 +223,7 @@ def async_setup(hass, config):
                 _LOGGER.debug("initialize component[%s]: wait for HA initialization.", setup_domain)
 
             if setup_domain in ['input_select', 'input_text', 'input_boolean']: #entity belongs to component
-                _LOGGER.debug("initialize component[%s]: component is ready, use component's method.", setup_domain)
+                _LOGGER.debug("initialize component[%s]: component is ready, use EntityComponent's method to initialize entity.", setup_domain)
                 #add entity in component
                 entities = []
                 for object_id, conf in VALIDATED_CONF.get(setup_domain, {}).items():
