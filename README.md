@@ -79,7 +79,6 @@ common_timer:
 3、再重启生效
 
 # 调试
-# 调试
 根据[教程][1]查看插件运行日志
 
 [1]: https://ljr.im/articles/home-assistant-novice-question-set/#3-%E8%B0%83%E8%AF%95%E5%8F%8A%E6%9F%A5%E7%9C%8B%E7%A8%8B%E5%BA%8F%E8%BF%90%E8%A1%8C%E6%97%A5%E5%BF%97 "调试及查看程序运行日志"
