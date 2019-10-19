@@ -279,30 +279,27 @@ def async_setup(hass, config):
     info_config = config[DOMAIN].get(CONF_INFO_PANEL)
     if info_config:
         entities = []
-        try:
-          for num in range(1, info_config[CONF_INFO_NUM_MIN]):
-              object_id = 'ct_record_{}'.format(num)
-              state_template = Template('-')
-              state_template.hass = hass
-              icon_template = Template('mdi:calendar-check')
-              icon_template.hass = hass
-              entity = SensorTemplate(hass = hass,
-                                      device_id = object_id,
-                                      friendly_name = '无定时任务',
-                                      friendly_name_template = None,
-                                      unit_of_measurement = None,
-                                      state_template = state_template,
-                                      icon_template = icon_template,
-                                      entity_picture_template = None,
-                                      entity_ids = set(),
-                                      availability_template = None,
-                                      attribute_templates = {},
-                                      device_class = None)
+        for num in range(1, info_config[CONF_INFO_NUM_MIN]):
+            object_id = 'ct_record_{}'.format(num)
+            state_template = Template('-')
+            state_template.hass = hass
+            icon_template = Template('mdi:calendar-check')
+            icon_template.hass = hass
+            entity = SensorTemplate(hass = hass,
+                                    device_id = object_id,
+                                    friendly_name = '无定时任务',
+                                    friendly_name_template = None,
+                                    unit_of_measurement = None,
+                                    state_template = state_template,
+                                    icon_template = icon_template,
+                                    entity_picture_template = None,
+                                    entity_ids = set(),
+                                    availability_template = None,
+                                    attribute_templates = {},
+                                    device_class = None)
 
-              entities.append(entity)
-              info_ui.append(entity.entity_id)
-        except:
-          _LOGGER.error('---device_id:%s---',device_id)
+            entities.append(entity)
+            info_ui.append(entity.entity_id)
         yield from hass.data['sensor']._platforms[PLATFORM_KEY].async_add_entities(entities)
         data = {
             ATTR_OBJECT_ID: info_config[CONF_NAME],
