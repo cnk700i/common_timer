@@ -1,7 +1,7 @@
 """
 author: cnk700i
 blog: ljr.im
-tested simplely On HA version: 0.98.3
+tested simplely On HA version: 0.100.2
 """
 import asyncio
 import logging
@@ -22,7 +22,6 @@ from homeassistant.const import (
 
 from homeassistant.helpers.config_validation import time_period_str
 from homeassistant.helpers.event import async_track_time_change,async_call_later
-from homeassistant.util.async_ import (run_coroutine_threadsafe, run_callback_threadsafe)
 from homeassistant.helpers import config_per_platform, discovery
 from homeassistant.helpers import discovery
 from homeassistant.helpers.template import Template
@@ -284,6 +283,9 @@ def async_setup(hass, config):
             state_template.hass = hass
             icon_template = Template('mdi:calendar-check')
             icon_template.hass = hass
+            availability_template = Template('-')
+            availability_template.hass = hass
+            attribute_templates = {}
             entity = SensorTemplate(hass = hass,
                                     device_id = object_id,
                                     friendly_name = '无定时任务',
@@ -291,6 +293,8 @@ def async_setup(hass, config):
                                     unit_of_measurement = None,
                                     state_template = state_template,
                                     icon_template = icon_template,
+                                    availability_template = availability_template,
+                                    attribute_templates = attribute_templates,
                                     entity_picture_template = None,
                                     entity_ids = set(),
                                     device_class = None)
@@ -807,7 +811,6 @@ class CommonTimer:
                 task['exec_time'] = datetime.now() + self._queue.get_remaining_time(task['handle'])
                 operation = 'off'
             service = 'turn_'+operation
-            state = operation
             self.set_state(entity_id, service = service, force_update = True)
             _LOGGER.debug("[handle_task] finish:{}({})".format(service,entity_id))
         self._hass.async_add_job(self.update_info)
@@ -906,6 +909,9 @@ class CommonTimer:
                 else:
                     _LOGGER.debug("row%s, no record. <info_entity_id = %s, state = %s>",row,info_entity_id, self.get_operation(running_tasks[row]['operation']))
                     object_id = 'ct_record_{}'.format(row)
+                    availability_template = Template('-')
+                    availability_template.hass = self._hass
+                    attribute_templates = {}
                     sensor = SensorTemplate(hass = self._hass,
                                             device_id = object_id,
                                             friendly_name = info1,
@@ -913,6 +919,8 @@ class CommonTimer:
                                             unit_of_measurement = None,
                                             state_template = info2,
                                             icon_template = info3,
+                                            availability_template = availability_template,
+                                            attribute_templates = attribute_templates,
                                             entity_picture_template = None,
                                             entity_ids = set(),
                                             device_class = None)
