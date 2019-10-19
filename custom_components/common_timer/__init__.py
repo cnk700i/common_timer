@@ -24,7 +24,6 @@ from homeassistant.const import (
 
 from homeassistant.helpers.config_validation import time_period_str
 from homeassistant.helpers.event import async_track_time_change,async_call_later
-# from homeassistant.util.async_ import (run_coroutine_threadsafe, run_callback_threadsafe)
 from homeassistant.helpers import config_per_platform, discovery
 from homeassistant.helpers import discovery
 from homeassistant.helpers.template import Template
