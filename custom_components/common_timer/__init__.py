@@ -1,7 +1,9 @@
 """
 author: cnk700i
 blog: ljr.im
-tested simplely On HA version: 0.98.3
+tested simplely On HA version: 0.100.2
+https://github.com/cnk700i/common_timer
+https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/
 """
 import asyncio
 import logging
@@ -22,7 +24,7 @@ from homeassistant.const import (
 
 from homeassistant.helpers.config_validation import time_period_str
 from homeassistant.helpers.event import async_track_time_change,async_call_later
-from homeassistant.util.async_ import (run_coroutine_threadsafe, run_callback_threadsafe)
+# from homeassistant.util.async_ import (run_coroutine_threadsafe, run_callback_threadsafe)
 from homeassistant.helpers import config_per_platform, discovery
 from homeassistant.helpers import discovery
 from homeassistant.helpers.template import Template
@@ -278,25 +280,30 @@ def async_setup(hass, config):
     info_config = config[DOMAIN].get(CONF_INFO_PANEL)
     if info_config:
         entities = []
-        for num in range(1, info_config[CONF_INFO_NUM_MIN]):
-            object_id = 'ct_record_{}'.format(num)
-            state_template = Template('-')
-            state_template.hass = hass
-            icon_template = Template('mdi:calendar-check')
-            icon_template.hass = hass
-            entity = SensorTemplate(hass = hass,
-                                    device_id = object_id,
-                                    friendly_name = '无定时任务',
-                                    friendly_name_template = None,
-                                    unit_of_measurement = None,
-                                    state_template = state_template,
-                                    icon_template = icon_template,
-                                    entity_picture_template = None,
-                                    entity_ids = set(),
-                                    device_class = None)
+        try:
+          for num in range(1, info_config[CONF_INFO_NUM_MIN]):
+              object_id = 'ct_record_{}'.format(num)
+              state_template = Template('-')
+              state_template.hass = hass
+              icon_template = Template('mdi:calendar-check')
+              icon_template.hass = hass
+              entity = SensorTemplate(hass = hass,
+                                      device_id = object_id,
+                                      friendly_name = '无定时任务',
+                                      friendly_name_template = None,
+                                      unit_of_measurement = None,
+                                      state_template = state_template,
+                                      icon_template = icon_template,
+                                      entity_picture_template = None,
+                                      entity_ids = set(),
+                                      availability_template = None,
+                                      attribute_templates = {},
+                                      device_class = None)
 
-            entities.append(entity)
-            info_ui.append(entity.entity_id)
+              entities.append(entity)
+              info_ui.append(entity.entity_id)
+        except:
+          _LOGGER.error('---device_id:%s---',device_id)
         yield from hass.data['sensor']._platforms[PLATFORM_KEY].async_add_entities(entities)
         data = {
             ATTR_OBJECT_ID: info_config[CONF_NAME],
@@ -914,6 +921,8 @@ class CommonTimer:
                                             state_template = info2,
                                             icon_template = info3,
                                             entity_picture_template = None,
+                                            availability_template = None,
+                                            attribute_templates = {},
                                             entity_ids = set(),
                                             device_class = None)
                     new_rows.append(sensor)
