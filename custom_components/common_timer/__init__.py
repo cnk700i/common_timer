@@ -283,9 +283,8 @@ def async_setup(hass, config):
             state_template.hass = hass
             icon_template = Template('mdi:calendar-check')
             icon_template.hass = hass
-            availability_template = Template('-')
+            availability_template = Template('true')
             availability_template.hass = hass
-            attribute_templates = {}
             entity = SensorTemplate(hass = hass,
                                     device_id = object_id,
                                     friendly_name = '无定时任务',
@@ -294,7 +293,7 @@ def async_setup(hass, config):
                                     state_template = state_template,
                                     icon_template = icon_template,
                                     availability_template = availability_template,
-                                    attribute_templates = attribute_templates,
+                                    attribute_templates={},
                                     entity_picture_template = None,
                                     entity_ids = set(),
                                     device_class = None)
@@ -362,6 +361,8 @@ def async_setup(hass, config):
                 # _LOGGER.debug('stop_loop_task')
                 if interrupt_loop and common_timer.stop_loop_task(event.data[ATTR_ENTITY_ID], context = event.context):
                     hass.async_add_job(common_timer.update_info)
+                # else:
+                #     hass.async_add_job(common_timer.update_info(event.data[ATTR_ENTITY_ID]))
         hass.bus.async_listen(EVENT_STATE_CHANGED, common_timer_handle)
 
         @asyncio.coroutine
@@ -455,6 +456,7 @@ class CommonTimer:
         self._queue = DelayQueue(60)  # create a queue
         self._running_tasks = None
         self._running_tasks_ids = None
+        self._last_running_tasks_ids = None
         self._info_config = info_config
     
     def refresh_ui(self):        
@@ -711,6 +713,7 @@ class CommonTimer:
             if state is not None:
                 data.update(state)
             # call service to controll device
+            # self._hass.services.async_call(domain, service, data, blocking = True, context = context )
             self._hass.async_add_job(self._hass.services.async_call(domain, service, data, context = context ))
 
     def set_options(self, entity_id, options, current_option = None, context = CONTEXT_IGNORE):
@@ -811,10 +814,18 @@ class CommonTimer:
                 task['exec_time'] = datetime.now() + self._queue.get_remaining_time(task['handle'])
                 operation = 'off'
             service = 'turn_'+operation
-            self.set_state(entity_id, service = service, force_update = True)
+            # self.set_state(entity_id, service = service, force_update = True)
             _LOGGER.debug("[handle_task] finish:{}({})".format(service,entity_id))
-        self._hass.async_add_job(self.update_info)
+            self._hass.async_add_job(self.call_service_and_update_info, entity_id, service)
+        # self._hass.async_add_job(self.update_info)
         # self._hass.async_add_job(self.long_time_task)  # for test
+
+    async def call_service_and_update_info(self, entity_id, service):
+        domain = entity_id.split('.')[0]
+        data = {'entity_id': entity_id}
+
+        await self._hass.services.async_call(domain, service, data, blocking = True, context = CONTEXT )
+        await self.update_info()
 
     def long_time_task(self):
         """ for test. """
@@ -865,14 +876,19 @@ class CommonTimer:
         return sorted(tasks, key=operator.itemgetter('exec_time'))
 
     @asyncio.coroutine
-    def update_info(self):
+    def update_info(self, entity_id = None):
         """update info and refresh info panel."""
         info_config = self._info_config
         if info_config is None:
             return
         _LOGGER.debug("↓↓↓↓↓_update_info()↓↓↓↓↓")
+        # if entity_id is not None and entity_id not in self._last_running_tasks_ids:
+        #     return
+
         running_tasks = self._get_running_tasks()
         self._running_tasks_ids = [entity['entity_id'] for entity in running_tasks]
+        # self._last_running_tasks_ids = copy.deepcopy(self._running_tasks_ids)
+
         info_row_num = len(running_tasks) if len(running_tasks) < info_config[CONF_INFO_NUM_MAX] else info_config[CONF_INFO_NUM_MAX]
         new_rows = []
         info_ui = []
@@ -909,9 +925,8 @@ class CommonTimer:
                 else:
                     _LOGGER.debug("row%s, no record. <info_entity_id = %s, state = %s>",row,info_entity_id, self.get_operation(running_tasks[row]['operation']))
                     object_id = 'ct_record_{}'.format(row)
-                    availability_template = Template('-')
+                    availability_template = Template('true')
                     availability_template.hass = self._hass
-                    attribute_templates = {}
                     sensor = SensorTemplate(hass = self._hass,
                                             device_id = object_id,
                                             friendly_name = info1,
@@ -920,7 +935,7 @@ class CommonTimer:
                                             state_template = info2,
                                             icon_template = info3,
                                             availability_template = availability_template,
-                                            attribute_templates = attribute_templates,
+                                            attribute_templates = {},
                                             entity_picture_template = None,
                                             entity_ids = set(),
                                             device_class = None)

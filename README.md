@@ -2,8 +2,10 @@
 使用说明见[个人blog](https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/)
 
 # 更新日志
+- 2019-10-24
+  1. 适配0.100.3
 - 2019-10-20
-  1. 适配0.100.2
+  1. ~~适配0.100.2（有问题）~~
 2019-09-07
   1. HA 0.98.3版本下测试
   2. 修复使用集成（例如ESPHOME）影响插件正常初始化问题。
