@@ -1,7 +1,7 @@
 """
 author: cnk700i
 blog: ljr.im
-tested simplely On HA version: 0.111.2
+tested simplely On HA version: 0.100.2
 https://github.com/cnk700i/common_timer
 https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/
 """
@@ -316,6 +316,7 @@ def async_setup(hass, config):
                                     entity_ids = set(),
                                     availability_template = None,
                                     attribute_templates = {},
+                                    unique_id = None,
                                     device_class = None)
 
             entities.append(entity)
