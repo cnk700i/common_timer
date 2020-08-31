@@ -1,7 +1,7 @@
 """
 author: cnk700i
 blog: ljr.im
-tested simplely On HA version: 0.100.2
+tested simplely On HA version: 0.114.4
 """
 import asyncio
 import logging
@@ -155,7 +155,8 @@ BUILT_IN_CONFIG = {
                 'pattern': '([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]',
                 'min': 0,
                 'max': 8,
-                'use_for': 'input_duration'
+                'use_for': 'input_duration',
+                'mode': 'text'
             }
         },
         'input_boolean': {
@@ -229,17 +230,18 @@ def async_setup(hass, config):
                     # _LOGGER.debug("setup %s.%s", setup_domain, object_id)
                     if setup_domain == 'input_select':
                         # InputSelect(object_id, name, initial, options, icon)
-                        entity = InputSelect(object_id, conf.get(CONF_NAME, object_id), conf.get(CONF_INITIAL), conf.get(CONF_OPTIONS) or [], conf.get(CONF_ICON))
+                        entity = InputSelect({'id': object_id, **conf})
                     elif setup_domain == 'input_text':
                         # InputText(object_id, name, initial, minimum, maximum, icon, unit, pattern, mode)
-                        entity = InputText(object_id, conf.get(CONF_NAME, object_id), conf.get(CONF_INITIAL), conf.get(CONF_MIN), conf.get(CONF_MAX), conf.get(CONF_ICON), conf.get(ATTR_UNIT_OF_MEASUREMENT), conf.get(CONF_PATTERN), conf.get(CONF_MODE))
+                        entity = InputText({'id': object_id, **conf})
                     elif setup_domain == 'input_boolean':
                         # InputBoolean(object_id, name, initial, icon)
-                        entity = InputBoolean(object_id, conf.get(CONF_NAME), conf.get(CONF_INITIAL), conf.get(CONF_ICON))
+                        entity = InputBoolean({'id': object_id, **conf})
                         _LOGGER.debug("input_boolean.timer_button:%s,%s,%s,%s", object_id, conf.get(CONF_NAME), conf.get(CONF_INITIAL), conf.get(CONF_ICON))
                     else:
                         pass
                         # _LOGGER.debug("illegal component:%s", object_id, conf.get(CONF_NAME), conf.get(CONF_INITIAL), conf.get(CONF_ICON))
+                    entity.entity_id = f"{setup_domain}.{object_id}"
                     entities.append(entity)
                 # _LOGGER.debug("entities:%s", entities)
                 yield from hass.data[setup_domain].async_add_entities(entities)        
@@ -251,7 +253,8 @@ def async_setup(hass, config):
                 p_validated = SENSOR_TEMPLATE_PLATFORM_SCHEMA(VALIDATED_CONF.get(setup_domain, {})[0])
                 # _LOGGER.debug('sensor_conf: %s', VALIDATED_CONF.get(setup_domain, {})[0])
                 # _LOGGER.debug('p_validated: %s', p_validated)
-                yield from hass.data[setup_domain].async_setup({setup_domain: p_validated})
+                # yield from hass.data[setup_domain].async_setup({setup_domain: p_validated})
+                yield from hass.data[setup_domain].async_setup_platform('template', p_validated)
             else:
                 _LOGGER.debug("initialize component[%s]: undefined initialize method.", setup_domain)
 
@@ -285,6 +288,7 @@ def async_setup(hass, config):
             icon_template.hass = hass
             availability_template = Template('true')
             availability_template.hass = hass
+            # unique_id = '{}_info_panel_sensor_{}'.format(DOMAIN,num)
             entity = SensorTemplate(hass = hass,
                                     device_id = object_id,
                                     friendly_name = '无定时任务',
@@ -296,8 +300,8 @@ def async_setup(hass, config):
                                     attribute_templates={},
                                     entity_picture_template = None,
                                     entity_ids = set(),
-                                    device_class = None)
-
+                                    device_class = None,
+                                    unique_id = None)
             entities.append(entity)
             info_ui.append(entity.entity_id)
         yield from hass.data['sensor']._platforms[PLATFORM_KEY].async_add_entities(entities)
