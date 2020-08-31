@@ -1,7 +1,9 @@
-# 备注
+## 备注
 使用说明见[个人blog](https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/)
 
-# 更新日志
+## 更新日志
+- 2020-08-31
+  1. 适配0.114.4
 - 2019-10-24
   1. 适配0.100.3
 - 2019-10-20
@@ -50,7 +52,7 @@
 
   - 这样就像个插件了。。。
 
-# 配置说明（configuration.yaml）
+## 配置说明（configuration.yaml）
 ```yaml
 common_timer:
   domains:  # 筛选设备（component）类型
@@ -80,13 +82,13 @@ common_timer:
 2. 拷贝组件到{[HA配置目录]}/custom_components目录下
 2. 找到各自目录里的__init__.py，将`async def async_setup(hass, config):`中的 `component= EntityComponent(_LOGGER, DOMAIN, hass)` 更改为 `component = hass.data[DOMAIN] = EntityComponent(_LOGGER, DOMAIN, hass)`
 
-# 周期任务时间比例自定义
+## 周期任务时间比例自定义
 面板就不放配置项了，不常用的功能。步骤：
 1、正常运行一次任务，重启保存配置文件
 2、{[HA配置目录]}/.storage/common_timer_tasks，在tasks:{}里面修改对应的entity_id的ratio值即可
 3、再重启生效
 
-# 调试
+## 调试
 根据[教程][1]查看插件运行日志
 
 [1]: https://ljr.im/articles/home-assistant-novice-question-set/#3-%E8%B0%83%E8%AF%95%E5%8F%8A%E6%9F%A5%E7%9C%8B%E7%A8%8B%E5%BA%8F%E8%BF%90%E8%A1%8C%E6%97%A5%E5%BF%97 "调试及查看程序运行日志"
