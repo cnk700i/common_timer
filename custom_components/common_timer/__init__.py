@@ -313,7 +313,7 @@ def async_setup(hass, config):
                                     state_template = state_template,
                                     icon_template = icon_template,
                                     entity_picture_template = None,
-                                    entity_ids = set(),
+                                    # entity_ids = set(),
                                     availability_template = None,
                                     attribute_templates = {},
                                     unique_id = None,
@@ -954,7 +954,7 @@ class CommonTimer:
                                             entity_picture_template = None,
                                             availability_template = availability_template,
                                             attribute_templates = {},
-                                            entity_ids = set(),
+                                            # entity_ids = set(),
                                             device_class = None)
                     new_rows.append(sensor)
                 info_ui.append(info_entity_id)
