@@ -299,7 +299,6 @@ def async_setup(hass, config):
                                     availability_template = availability_template,
                                     attribute_templates={},
                                     entity_picture_template = None,
-                                    entity_ids = set(),
                                     device_class = None,
                                     unique_id = None)
             entities.append(entity)
@@ -922,9 +921,11 @@ class CommonTimer:
                 if info_entity is not None:
                     _LOGGER.debug("row%s, record exist. <info_entity_id= %s >",row,info_entity_id)
                     info_entity._name = info1
-                    info_entity._template = info2
+                    # info_entity._template = info2 
+                    info_entity._state = info2.template
                     info_entity._icon_template = info3
                     info_entity.schedule_update_ha_state(True)  # force_refresh = True to call device_update to update sensor.template
+                    
                 # row has record, add   
                 else:
                     _LOGGER.debug("row%s, no record. <info_entity_id = %s, state = %s>",row,info_entity_id, self.get_operation(running_tasks[row]['operation']))
@@ -941,7 +942,6 @@ class CommonTimer:
                                             availability_template = availability_template,
                                             attribute_templates = {},
                                             entity_picture_template = None,
-                                            entity_ids = set(),
                                             device_class = None)
                     new_rows.append(sensor)
                 info_ui.append(info_entity_id)
@@ -950,7 +950,8 @@ class CommonTimer:
                 if not any([info_row_num, row]) or row < info_config[CONF_INFO_NUM_MIN] or info_config[CONF_INFO_NUM_MAX] == info_config[CONF_INFO_NUM_MIN]:
                     info1 = '无定时任务'
                     info_entity._name = info1
-                    info_entity._template = default_state
+                    # info_entity._template = default_state
+                    info_entity._template = default_state.template
                     info_entity._icon_template = default_icon
                     info_entity.schedule_update_ha_state(True)  # force_refresh = True to call device_update to update sensor.template
                     info_ui.append(info_entity_id)

@@ -1,7 +1,10 @@
 ## 备注
+目前插件界面使用HA的template、input_select、input_boolean、input_text组件，随HA版本更新这些组件方法会失效导致本插件无法正常使用，可到[release页面](https://github.com/cnk700i/common_timer/releases)找相近版本尝试
 使用说明见[个人blog](https://ljr.im/articles/plugin-home-assistant-general-timer-upgrade/)
 
 ## 更新日志
+- 2020-10-13
+  1. 适配0.116.2
 - 2020-08-31
   1. 适配0.114.4
 - 2019-10-24
