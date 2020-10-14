@@ -951,7 +951,7 @@ class CommonTimer:
                     info1 = '无定时任务'
                     info_entity._name = info1
                     # info_entity._template = default_state
-                    info_entity._template = default_state.template
+                    info_entity._state = default_state.template
                     info_entity._icon_template = default_icon
                     info_entity.schedule_update_ha_state(True)  # force_refresh = True to call device_update to update sensor.template
                     info_ui.append(info_entity_id)
