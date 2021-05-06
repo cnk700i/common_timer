@@ -207,7 +207,7 @@ def async_setup(hass, config):
             for object_id in VALIDATED_CONF[domain][0]['sensors']:
                 info_ui.append('{}.{}'.format(domain, object_id))
         else:
-            for object_id in VALIDATED_CONF[domain]:        
+            for object_id in VALIDATED_CONF[domain]:
                 if CONF_USE_FOR in VALIDATED_CONF[domain][object_id]:
                     user_for = VALIDATED_CONF[domain][object_id][CONF_USE_FOR]
                     ui[user_for] = '{}.{}'.format(domain, object_id)
@@ -215,7 +215,7 @@ def async_setup(hass, config):
 
     components = set(key.split(' ')[0] for key in config.keys())
     for setup_domain in ['input_select', 'input_text', 'input_boolean', 'sensor']:
-        #config file contains info, let HA initailize 
+        #config file contains info, let HA initailize
         if setup_domain in components or setup_domain in hass.data:
             _LOGGER.debug('initialize component[%s]: config has this component', setup_domain)
             #wait for HA initialize component
@@ -266,7 +266,7 @@ def async_setup(hass, config):
                     entities.append(entity)
                 yield from hass.data[setup_domain].async_add_entities(entities)
             # sensor should set a unique namespace to ensure it's a new platform and don't affect other entities using template platform which have been initialized.
-            elif setup_domain in ['sensor']:   #entity belongs to component.platform 
+            elif setup_domain in ['sensor']:   #entity belongs to component.platform
                 _LOGGER.debug("initialize component.platform[%s]: component is ready, use EntityComponent's method to initialize entity.", setup_domain)
                 # SCHEMA
                 p_validated = SENSOR_TEMPLATE_PLATFORM_SCHEMA(VALIDATED_CONF.get(setup_domain, {})[0])
@@ -306,8 +306,9 @@ def async_setup(hass, config):
             icon_template.hass = hass
 #改动 缺失的必要参数
             entity = SensorTemplate(hass = hass,
-                                    device_id = object_id,
-                                    friendly_name = '无定时任务',
+                                    # device_id = object_id,
+                                    # friendly_name = '无定时任务',
+                                    object_id = object_id,
                                     friendly_name_template = None,
                                     unit_of_measurement = None,
                                     state_template = state_template,
@@ -357,7 +358,7 @@ def async_setup(hass, config):
         _LOGGER.info('start initialize common_timer.')
         common_timer = CommonTimer(domains, exclude, pattern, ratio, ui, hass, info_config)
         yield from common_timer.start()
-        
+
         interrupt_loop = config[DOMAIN].get(CONF_INTERRUPT_LOOP)
         @callback
         def common_timer_handle(event):
@@ -400,7 +401,7 @@ def async_setup(hass, config):
                 pass
         hass.services.async_register(DOMAIN, SERVICE_SET, async_handler_service, schema=COMMON_TIMER_SERVICE_SCHEMA)
         hass.services.async_register(DOMAIN, SERVICE_CANCEL, async_handler_service, schema=COMMON_TIMER_SERVICE_SCHEMA)
-        
+
 
         @asyncio.coroutine
         def stop_common_timer(event):
@@ -482,8 +483,8 @@ class CommonTimer:
         self._running_tasks_ids = None
         self._last_running_tasks_ids = None
         self._info_config = info_config
-    
-    def refresh_ui(self):        
+
+    def refresh_ui(self):
         _LOGGER.debug('refresh_ui()')
         if self._entity_id is None:
             return
@@ -514,7 +515,7 @@ class CommonTimer:
                     _LOGGER.debug("添加设备:{}（{}）".format(friendly_name, entity_id))
                     self._dic_friendly_name.setdefault(friendly_name, entity_id)
                     self._tasks.setdefault(domain,{}).setdefault(entity_id,{})
-                    self._tasks[domain][entity_id]['friendly_name'] = friendly_name                 
+                    self._tasks[domain][entity_id]['friendly_name'] = friendly_name
                     self._tasks[domain][entity_id]['icon'] = self.get_attributes(entity_id).get('icon', self._dic_icon[domain])
                     self._tasks[domain][entity_id]['entity_id'] = entity_id
                     self._tasks[domain][entity_id]['remaining'] = '0:00:00'
@@ -539,7 +540,7 @@ class CommonTimer:
             'options': options
         }
         self._hass.async_add_job(self._hass.services.async_call('input_select', SERVICE_SET_OPTIONS, data))
-        
+
         async_track_time_change(self._hass, self.update) # update every second
 
     @asyncio.coroutine
@@ -552,7 +553,7 @@ class CommonTimer:
                 'operation': attrs['operation'],
                 'count': attrs['count'],
                 'ratio': attrs['ratio']
-            } 
+            }
             for entities in self._tasks.values() for entity_id, attrs in entities.items() if attrs['duration'] != '0:00:00' or attrs['count'] != 0
         ]
         # _LOGGER.debug('[stop()] save task config: <tasks=%s>',tasks)
@@ -576,7 +577,7 @@ class CommonTimer:
             options.insert(0,'---请选择设备---')
         self.set_options(self._ui[UI_INPUT_ENTITY], options)
         # self.set_options(self._ui[UI_INPUT_OPERATION], DEFAULT_OPERATION_OPTIONS)
-    
+
     def choose_entity(self, friendly_name):
         """ load entity task params and set ui."""
         # self.set_state(self._ui[UI_INPUT_OPERATION], state = '-', force_update = True, context = CONTEXT_IGNORE)
@@ -617,7 +618,7 @@ class CommonTimer:
         # save operation if task is not running, besides setting options will cause a operation change.
         if self.get_state(self._ui[UI_SWITCH]) == 'off' and context != CONTEXT_IGNORE:
             task['operation'] = self.get_operation(ui_operation = operation)
-    
+
     def switch(self, state, context = None):
         """ start or stop task """
         # _LOGGER.debug('switch()')
@@ -641,13 +642,13 @@ class CommonTimer:
                         if task['remaining'] != duration:
                             task['duration'] = duration  # set duration attr
                         task['handle'] = self._queue.insert(entity_id, duration, self.handle_task, operation = operation)  # initialize queue task
-                        task['operation'] = operation #set operation attr                            
+                        task['operation'] = operation #set operation attr
 
                         # sync state for loop task
                         if 'temporary' in operation:
                             task['next_operation'] = operation.split('_')[1]  # set next_operation attr, used in info panenl to show state
                             state = 'off' if task['next_operation'] == 'on' else 'on'
-                            self.set_state(entity_id, service = 'turn_'+state, force_update = True) 
+                            self.set_state(entity_id, service = 'turn_'+state, force_update = True)
                             #service.call()
                         else:
                             task['next_operation'] = operation
@@ -680,7 +681,7 @@ class CommonTimer:
             return self._tasks.get(domain, None).get(entity_id, None)
         else:
             return None
-    
+
     def get_operation(self,ui_operation = None, task = None):
         """ transform operation string between ui and task"""
         if ui_operation is not None:
@@ -705,7 +706,7 @@ class CommonTimer:
             return state.as_dict()['state']
         else:
             return None
-    
+
     def get_attributes(self, entity_id):
         """ return entity attributes. """
         state = self._hass.states.get(entity_id)
@@ -752,7 +753,7 @@ class CommonTimer:
 
     @callback
     def update(self, time):
-        """ queue step forward and refresh timer display. 
+        """ queue step forward and refresh timer display.
             define callback to run in main thread.
         """
         self._queue.next()  # queue handler
@@ -779,7 +780,7 @@ class CommonTimer:
     # @asyncio.coroutine
     def handle_task(self, entity_id, command, **kwargs):
         """ handle task when time arrive.
-            if handler take long time, use hass.async_add_job(func) to exec in another thread. 
+            if handler take long time, use hass.async_add_job(func) to exec in another thread.
         """
         _LOGGER.debug("[handle_task] start: entity_id = %s, command = %s.", entity_id, command)
         task = self._get_task(entity_id)
@@ -853,7 +854,7 @@ class CommonTimer:
         _LOGGER.debug("handle long time task, start")
         time.sleep(5)
         _LOGGER.debug("handle long time task, finish")
-    
+
     def _get_index_of_running_tasks(self, entity_id):
         """ return index of running_tasks. """
         if entity_id is None or self._running_tasks_ids is None:
@@ -885,7 +886,7 @@ class CommonTimer:
                 #reset frontend
                 if self._entity_id == entity_id:
                     self.set_state(self._ui[UI_SWITCH], state = 'off')
-                    self.set_state(self._ui[UI_INPUT_DURATION], state = task['duration'])                
+                    self.set_state(self._ui[UI_INPUT_DURATION], state = task['duration'])
             else:
                 _LOGGER.debug("operated by common_timer.py. <entity_id = %s, context = %s>", entity_id, context)
             return True
@@ -937,7 +938,7 @@ class CommonTimer:
                     info_entity._template = info2
                     info_entity._icon_template = info3
                     info_entity.schedule_update_ha_state(True)  # force_refresh = True to call device_update to update sensor.template
-                # row has record, add   
+                # row has record, add
                 else:
                     _LOGGER.debug("row%s, no record. <info_entity_id = %s, state = %s>",row,info_entity_id, self.get_operation(running_tasks[row]['operation']))
                     object_id = 'ct_record_{}'.format(row)
@@ -946,7 +947,7 @@ class CommonTimer:
 #改动 缺失的必要参数
                     sensor = SensorTemplate(hass = self._hass,
                                             device_id = object_id,
-                                            friendly_name = info1,
+                                            # friendly_name = info1,
                                             friendly_name_template = None,
                                             unit_of_measurement = None,
                                             state_template = info2,
@@ -1004,7 +1005,7 @@ class CommonTimer:
                 self.set_state(self._ui[UI_SWITCH], state = 'on')
         else:
             _LOGGER.info('set up task for %s failure', entity_id)
-    
+
     def cancel_task(self, entity_id):
         """ cancel task. """
         task = self._get_task(entity_id)
@@ -1028,7 +1029,7 @@ class DelayQueue(object):
         """initailize a queue. """
         self.__slots_per_loop = slots_per_loop
         self.__queue = [[] for i in range(slots_per_loop)]
-    
+
     def insert(self, task_id, duration, callback, operation = 'turn_off', **kwargs):
         """ add new task into queue """
         if duration == "0:00:00":
@@ -1049,7 +1050,7 @@ class DelayQueue(object):
         else:
             _LOGGER.debug("remove task: task has been removed.")
 
-    
+
     def get_remaining_time(self, delayQueueTask):
         """ return remaining time of task"""
         if delayQueueTask:
@@ -1060,7 +1061,7 @@ class DelayQueue(object):
             return timedelta(seconds = second)
         else:
             return None
-   
+
     def next(self):
         """ queue read tasks of current slot, and execute task when loop count of task arrives 0 """
         if len(self.__queue) >= self.__current_slot:
@@ -1125,7 +1126,7 @@ class DelayQueueTask(object):
             return True
         else:
             return False
-    
+
     def exec_task(self):
         """ handle task"""
         self._exec_task(self._task_id, self._operation, kwargs = self._kwargs)
