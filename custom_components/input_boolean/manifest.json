@@ -3,5 +3,6 @@
   "name": "Input Boolean",
   "documentation": "https://www.home-assistant.io/integrations/input_boolean",
   "codeowners": ["@home-assistant/core"],
-  "quality_scale": "internal"
+  "quality_scale": "internal",
+  "version": "2021.5.4"
 }

@@ -290,9 +290,8 @@ def async_setup(hass, config):
             availability_template.hass = hass
             # unique_id = '{}_info_panel_sensor_{}'.format(DOMAIN,num)
             entity = SensorTemplate(hass = hass,
-                                    device_id = object_id,
-                                    friendly_name = '无定时任务',
-                                    friendly_name_template = None,
+                                    object_id = object_id,
+                                    friendly_name_template = Template('无定时任务'),
                                     unit_of_measurement = None,
                                     state_template = state_template,
                                     icon_template = icon_template,

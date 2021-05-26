@@ -1,8 +1,11 @@
 # Describes the format for available timer services
 
 set:
+  name: Set
   description: 设置任务。
-
+  target:
+    entity:
+    domain:
   fields:
     entity_id:
       description: 目标设备，面板设备列表里的设备才能控制。 [必需]
@@ -10,16 +13,28 @@ set:
     duration:
       description: 倒计时，默认30分钟。 [可选]
       example: '"00:01:00" 或者 "60"'
+      selector:
+        text:
     operation:
       description: 操作，标准模式支持开/关，自定义模式可调用entity指定属性定义的service（使用"custom:"开头，属性层级以/分隔）。默认"off"（关）。 [可选]
-      example: '标准模式："on"/"off"；自定义模式："custom:aihome_actions/timing_turn_on"'
+      example: '标准模式："on"/"off"；自定义模式："custom:attr_actions/my_action"，通过customize.yaml添加属性定义'
+      selector:
+        text:
     is_loop:
       description: 是否循环任务，默认"false"（不循环）。 [可选]
       example: '"true" 或者 "false"'
+      selector:
+        select:
+          options:
+            - "true"
+            - "false"
 
 cancel:
+  name: Cancel
   description: 取消任务。
-
+  target:
+    entity:
+    domain:
   fields:
     entity_id:
       description: 目标设备，面板设备列表里的设备才能控制。 [必需]

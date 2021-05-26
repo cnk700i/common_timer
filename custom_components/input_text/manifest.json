@@ -3,5 +3,6 @@
   "name": "Input Text",
   "documentation": "https://www.home-assistant.io/integrations/input_text",
   "codeowners": ["@home-assistant/core"],
-  "quality_scale": "internal"
+  "quality_scale": "internal",
+  "version": "2021.5.4"
 }
