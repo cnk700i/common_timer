@@ -3,6 +3,8 @@
 - 插件使用说明见[个人blog](https://ljr.im/articles/plugin-home-assistant-universal-timer-upgraded-version/)
 
 ## 更新日志
+- 2020-05-26
+  1. 适配HA 2021.5.4
 - 2020-10-13
   1. 适配0.116.2
 - 2020-08-31
