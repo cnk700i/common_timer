@@ -318,7 +318,8 @@ def async_setup(hass, config):
                                     availability_template = None,
                                     attribute_templates = {},
                                     unique_id = None,
-                                    device_class = None)
+                                    device_class = None,
+                                    state_class = None)
 
             entities.append(entity)
             info_ui.append(entity.entity_id)
