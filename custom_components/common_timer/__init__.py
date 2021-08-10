@@ -375,7 +375,7 @@ def async_setup(hass, config):
             entity = SensorTemplate(
                 hass=hass,
                 object_id=object_id,
-                friendly_name_template=None,
+                friendly_name_template=Template("无定时任务"),
                 unit_of_measurement=None,
                 state_template=state_template,
                 icon_template=icon_template,
@@ -1211,28 +1211,20 @@ class CommonTimer:
             info_entity_id = "sensor.ct_record_{}".format(row)
             info_entity = self._hass.data["sensor"].get_entity(info_entity_id)
             # rows show record
-            _LOGGER.debug(
-                "***************************************************************"
-            )
-            _LOGGER.debug(
-                "info_entity_id:%s,info_entity:%s, row=%s,info_row_num=%s",
-                info_entity_id,
-                info_entity,
-                row,
-                info_row_num,
-            )
+
             if row < info_row_num:
                 _LOGGER.debug(
                     "[row < info_row_num]info_entity:%s, row=%s", info_entity, row
                 )
                 # info1 = '{0:{2}<12}{1:{2}>20}'.format(running_tasks[row]['friendly_name'], running_tasks[row]['exec_time'].strftime("%Y-%m-%d %H:%M:%S"),chr(12288))  # for test
-                info1 = "{}{}".format(
+                info1 = "{}{}-->{}".format(
                     align(running_tasks[row]["friendly_name"], 20),
                     align(
                         running_tasks[row]["exec_time"].strftime("%Y-%m-%d %H:%M:%S"),
                         20,
                     ),
-                )  # name+time info template
+                    align(running_tasks[row]["operation"], 20),
+                )  # name+time+operation info template
                 if "custom:" in running_tasks[row]["operation"]:
                     info2 = Template("call service")  # operation info template
                 else:
@@ -1258,13 +1250,6 @@ class CommonTimer:
                         "row%s, record exist. <info_entity_id= %s >",
                         row,
                         info_entity_id,
-                    )
-                    _LOGGER.debug(
-                        "info_entity:%s,info_entity._friendly_name_template:%s, info_entity._attribute_templates:%s,info_entity._icon_template :%s",
-                        info_entity,
-                        info_entity._friendly_name_template,
-                        info_entity._attribute_templates,
-                        info_entity._icon_template,
                     )
 
                     info_entity._attr_name = info1
@@ -1312,7 +1297,6 @@ class CommonTimer:
                     or info_config[CONF_INFO_NUM_MAX] == info_config[CONF_INFO_NUM_MIN]
                 ):
                     info1 = "无定时任务"
-                    # info_entity._name = info1
                     info_entity._attr_name = info1
                     info_entity._template = default_state
                     info_entity._icon_template = default_icon
