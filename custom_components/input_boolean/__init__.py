@@ -1,17 +1,8 @@
 """Support to keep track of user controlled booleans for within automation."""
-import logging
-import typing
-
-import voluptuous as vol
-
-from homeassistant.const import (
-    ATTR_EDITABLE,
-    CONF_ICON,
-    CONF_ID,"""Support to keep track of user controlled booleans for within automation."""
 from __future__ import annotations
 
 import logging
-import typing
+from typing import Any
 
 import voluptuous as vol
 
@@ -26,7 +17,7 @@ from homeassistant.const import (
     SERVICE_TURN_ON,
     STATE_ON,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import collection
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import ToggleEntity
@@ -34,7 +25,7 @@ from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.restore_state import RestoreEntity
 import homeassistant.helpers.service
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers.typing import ConfigType, HomeAssistantType, ServiceCallType
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import bind_hass
 
 DOMAIN = "input_boolean"
@@ -71,28 +62,28 @@ class InputBooleanStorageCollection(collection.StorageCollection):
     CREATE_SCHEMA = vol.Schema(CREATE_FIELDS)
     UPDATE_SCHEMA = vol.Schema(UPDATE_FIELDS)
 
-    async def _process_create_data(self, data: typing.Dict) -> typing.Dict:
+    async def _process_create_data(self, data: dict) -> dict:
         """Validate the config is valid."""
         return self.CREATE_SCHEMA(data)
 
     @callback
-    def _get_suggested_id(self, info: typing.Dict) -> str:
+    def _get_suggested_id(self, info: dict) -> str:
         """Suggest an ID based on the config."""
         return info[CONF_NAME]
 
-    async def _update_data(self, data: dict, update_data: typing.Dict) -> typing.Dict:
+    async def _update_data(self, data: dict, update_data: dict) -> dict:
         """Return a new updated data object."""
         update_data = self.UPDATE_SCHEMA(update_data)
         return {**data, **update_data}
 
 
 @bind_hass
-def is_on(hass, entity_id):
+def is_on(hass: HomeAssistant, entity_id: str) -> bool:
     """Test if input_boolean is True."""
     return hass.states.is_state(entity_id, STATE_ON)
 
 
-async def async_setup(hass: HomeAssistantType, config: ConfigType) -> bool:
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up an input boolean."""
     component = hass.data[DOMAIN] = EntityComponent(_LOGGER, DOMAIN, hass)
     id_manager = collection.IDManager()
@@ -122,7 +113,7 @@ async def async_setup(hass: HomeAssistantType, config: ConfigType) -> bool:
         storage_collection, DOMAIN, DOMAIN, CREATE_FIELDS, UPDATE_FIELDS
     ).async_setup(hass)
 
-    async def reload_service_handler(service_call: ServiceCallType) -> None:
+    async def reload_service_handler(service_call: ServiceCall) -> None:
         """Remove all input booleans and load new ones from config."""
         conf = await component.async_prepare_reload(skip_reset=True)
         if conf is None:
@@ -154,14 +145,17 @@ async def async_setup(hass: HomeAssistantType, config: ConfigType) -> bool:
 class InputBoolean(ToggleEntity, RestoreEntity):
     """Representation of a boolean input."""
 
-    def __init__(self, config: typing.Optional[dict]):
+    _attr_should_poll = False
+
+    def __init__(self, config: ConfigType) -> None:
         """Initialize a boolean input."""
         self._config = config
         self.editable = True
-        self._state = config.get(CONF_INITIAL)
+        self._attr_is_on = config.get(CONF_INITIAL, False)
+        self._attr_unique_id = config[CONF_ID]
 
     @classmethod
-    def from_yaml(cls, config: typing.Dict) -> InputBoolean:
+    def from_yaml(cls, config: ConfigType) -> InputBoolean:
         """Return entity instance initialized from yaml storage."""
         input_bool = cls(config)
         input_bool.entity_id = f"{DOMAIN}.{config[CONF_ID]}"
@@ -169,258 +163,41 @@ class InputBoolean(ToggleEntity, RestoreEntity):
         return input_bool
 
     @property
-    def should_poll(self):
-        """If entity should be polled."""
-        return False
-
-    @property
-    def name(self):
+    def name(self) -> str | None:
         """Return name of the boolean input."""
         return self._config.get(CONF_NAME)
 
     @property
-    def state_attributes(self):
+    def icon(self) -> str | None:
+        """Return the icon to be used for this entity."""
+        return self._config.get(CONF_ICON)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, bool]:
         """Return the state attributes of the entity."""
         return {ATTR_EDITABLE: self.editable}
 
-    @property
-    def icon(self):
-        """Return the icon to be used for this entity."""
-        return self._config.get(CONF_ICON)
-
-    @property
-    def is_on(self):
-        """Return true if entity is on."""
-        return self._state
-
-    @property
-    def unique_id(self):
-        """Return a unique ID for the person."""
-        return self._config[CONF_ID]
-
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self) -> None:
         """Call when entity about to be added to hass."""
-        # If not None, we got an initial value.
+        # Don't restore if we got an initial value.
         await super().async_added_to_hass()
-        if self._state is not None:
+        if self._config.get(CONF_INITIAL) is not None:
             return
 
         state = await self.async_get_last_state()
-        self._state = state and state.state == STATE_ON
+        self._attr_is_on = state is not None and state.state == STATE_ON
 
-    async def async_turn_on(self, **kwargs):
+    async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""
-        self._state = True
+        self._attr_is_on = True
         self.async_write_ha_state()
 
-    async def async_turn_off(self, **kwargs):
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity off."""
-        self._state = False
+        self._attr_is_on = False
         self.async_write_ha_state()
 
-    async def async_update_config(self, config: typing.Dict) -> None:
-        """Handle when the config is updated."""
-        self._config = config
-        self.async_write_ha_state()
-
-    CONF_NAME,
-    SERVICE_RELOAD,
-    SERVICE_TOGGLE,
-    SERVICE_TURN_OFF,
-    SERVICE_TURN_ON,
-    STATE_ON,
-)
-from homeassistant.core import callback
-from homeassistant.helpers import collection
-import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.entity import ToggleEntity
-from homeassistant.helpers.entity_component import EntityComponent
-from homeassistant.helpers.restore_state import RestoreEntity
-import homeassistant.helpers.service
-from homeassistant.helpers.storage import Store
-from homeassistant.helpers.typing import ConfigType, HomeAssistantType, ServiceCallType
-from homeassistant.loader import bind_hass
-
-DOMAIN = "input_boolean"
-
-_LOGGER = logging.getLogger(__name__)
-
-CONF_INITIAL = "initial"
-
-CREATE_FIELDS = {
-    vol.Required(CONF_NAME): vol.All(str, vol.Length(min=1)),
-    vol.Optional(CONF_INITIAL): cv.boolean,
-    vol.Optional(CONF_ICON): cv.icon,
-}
-
-UPDATE_FIELDS = {
-    vol.Optional(CONF_NAME): cv.string,
-    vol.Optional(CONF_INITIAL): cv.boolean,
-    vol.Optional(CONF_ICON): cv.icon,
-}
-
-CONFIG_SCHEMA = vol.Schema(
-    {DOMAIN: cv.schema_with_slug_keys(vol.Any(UPDATE_FIELDS, None))},
-    extra=vol.ALLOW_EXTRA,
-)
-
-RELOAD_SERVICE_SCHEMA = vol.Schema({})
-STORAGE_KEY = DOMAIN
-STORAGE_VERSION = 1
-
-
-class InputBooleanStorageCollection(collection.StorageCollection):
-    """Input boolean collection stored in storage."""
-
-    CREATE_SCHEMA = vol.Schema(CREATE_FIELDS)
-    UPDATE_SCHEMA = vol.Schema(UPDATE_FIELDS)
-
-    async def _process_create_data(self, data: typing.Dict) -> typing.Dict:
-        """Validate the config is valid."""
-        return self.CREATE_SCHEMA(data)
-
-    @callback
-    def _get_suggested_id(self, info: typing.Dict) -> str:
-        """Suggest an ID based on the config."""
-        return info[CONF_NAME]
-
-    async def _update_data(self, data: dict, update_data: typing.Dict) -> typing.Dict:
-        """Return a new updated data object."""
-        update_data = self.UPDATE_SCHEMA(update_data)
-        return {**data, **update_data}
-
-
-@bind_hass
-def is_on(hass, entity_id):
-    """Test if input_boolean is True."""
-    return hass.states.is_state(entity_id, STATE_ON)
-
-
-async def async_setup(hass: HomeAssistantType, config: ConfigType) -> bool:
-    """Set up an input boolean."""
-    component = hass.data[DOMAIN] = EntityComponent(_LOGGER, DOMAIN, hass)
-    id_manager = collection.IDManager()
-
-    yaml_collection = collection.YamlCollection(
-        logging.getLogger(f"{__name__}.yaml_collection"), id_manager
-    )
-    collection.attach_entity_component_collection(
-        component, yaml_collection, lambda conf: InputBoolean(conf, from_yaml=True)
-    )
-
-    storage_collection = InputBooleanStorageCollection(
-        Store(hass, STORAGE_VERSION, STORAGE_KEY),
-        logging.getLogger(f"{__name__}_storage_collection"),
-        id_manager,
-    )
-    collection.attach_entity_component_collection(
-        component, storage_collection, InputBoolean
-    )
-
-    await yaml_collection.async_load(
-        [{CONF_ID: id_, **(conf or {})} for id_, conf in config.get(DOMAIN, {}).items()]
-    )
-    await storage_collection.async_load()
-
-    collection.StorageCollectionWebsocket(
-        storage_collection, DOMAIN, DOMAIN, CREATE_FIELDS, UPDATE_FIELDS
-    ).async_setup(hass)
-
-    collection.attach_entity_registry_cleaner(hass, DOMAIN, DOMAIN, yaml_collection)
-    collection.attach_entity_registry_cleaner(hass, DOMAIN, DOMAIN, storage_collection)
-
-    async def reload_service_handler(service_call: ServiceCallType) -> None:
-        """Remove all input booleans and load new ones from config."""
-        conf = await component.async_prepare_reload(skip_reset=True)
-        if conf is None:
-            return
-        await yaml_collection.async_load(
-            [
-                {CONF_ID: id_, **(conf or {})}
-                for id_, conf in conf.get(DOMAIN, {}).items()
-            ]
-        )
-
-    homeassistant.helpers.service.async_register_admin_service(
-        hass,
-        DOMAIN,
-        SERVICE_RELOAD,
-        reload_service_handler,
-        schema=RELOAD_SERVICE_SCHEMA,
-    )
-
-    component.async_register_entity_service(SERVICE_TURN_ON, {}, "async_turn_on")
-
-    component.async_register_entity_service(SERVICE_TURN_OFF, {}, "async_turn_off")
-
-    component.async_register_entity_service(SERVICE_TOGGLE, {}, "async_toggle")
-
-    return True
-
-
-class InputBoolean(ToggleEntity, RestoreEntity):
-    """Representation of a boolean input."""
-
-    def __init__(self, config: typing.Optional[dict], from_yaml: bool = False):
-        """Initialize a boolean input."""
-        self._config = config
-        self._editable = True
-        self._state = config.get(CONF_INITIAL)
-        if from_yaml:
-            self._editable = False
-            self.entity_id = f"{DOMAIN}.{self.unique_id}"
-
-    @property
-    def should_poll(self):
-        """If entity should be polled."""
-        return False
-
-    @property
-    def name(self):
-        """Return name of the boolean input."""
-        return self._config.get(CONF_NAME)
-
-    @property
-    def state_attributes(self):
-        """Return the state attributes of the entity."""
-        return {ATTR_EDITABLE: self._editable}
-
-    @property
-    def icon(self):
-        """Return the icon to be used for this entity."""
-        return self._config.get(CONF_ICON)
-
-    @property
-    def is_on(self):
-        """Return true if entity is on."""
-        return self._state
-
-    @property
-    def unique_id(self):
-        """Return a unique ID for the person."""
-        return self._config[CONF_ID]
-
-    async def async_added_to_hass(self):
-        """Call when entity about to be added to hass."""
-        # If not None, we got an initial value.
-        await super().async_added_to_hass()
-        if self._state is not None:
-            return
-
-        state = await self.async_get_last_state()
-        self._state = state and state.state == STATE_ON
-
-    async def async_turn_on(self, **kwargs):
-        """Turn the entity on."""
-        self._state = True
-        await self.async_update_ha_state()
-
-    async def async_turn_off(self, **kwargs):
-        """Turn the entity off."""
-        self._state = False
-        await self.async_update_ha_state()
-
-    async def async_update_config(self, config: typing.Dict) -> None:
+    async def async_update_config(self, config: ConfigType) -> None:
         """Handle when the config is updated."""
         self._config = config
         self.async_write_ha_state()
