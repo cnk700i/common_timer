@@ -1,7 +1,7 @@
 """
 author: cnk700i
 blog: ljr.im
-tested simplely On HA version: 0.114.4
+tested simplely On HA version: Home Assistant 2021.8.4
 """
 import asyncio
 import logging
